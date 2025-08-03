@@ -2,6 +2,8 @@ import { GitHub } from "./github.js";
 import { getToken, getHook, getStats, saveStats, updateObjectDatafromPath } from "./storage.js";
 import { isNull } from "./util.js";
 import log from "@/commons/logger.js";
+import SSAFYTodayAPI from "@/commons/ssafy-api.js";
+import { Toast } from "@/commons/toast.js";
 
 /**
  * 모든 플랫폼에서 공통으로 사용할 수 있는 업로드 서비스 클래스
@@ -32,6 +34,23 @@ export default class UploadService {
       if (isNull(token) || isNull(hook)) {
         log.error("Token or hook is null", token, hook);
         return Promise.resolve();
+      }
+
+      // SSAFY Today API로 데이터 전송 (실패해도 GitHub 업로드는 계속 진행)
+      try {
+        log.info("Sending data to SSAFY Today API...");
+        const ssafyResponse = await SSAFYTodayAPI.sendSubmission(problemData);
+        if (ssafyResponse.success) {
+          log.info("Successfully sent data to SSAFY Today");
+          Toast.info("✅ SSAFY Today 전송 완료!", 3000);
+        } else {
+          log.warn("Failed to send data to SSAFY Today, but continuing with GitHub upload", ssafyResponse.error);
+          Toast.warning("⚠️ SSAFY Today 전송 실패 (GitHub 업로드는 계속됩니다)", 4000);
+        }
+      } catch (ssafyError) {
+        log.error("Error sending to SSAFY Today API, but continuing with GitHub upload:", ssafyError);
+        // SSAFY API 오류는 무시하고 GitHub 업로드 계속 진행
+        Toast.warning("⚠️ SSAFY Today 연결 오류 (GitHub 업로드는 계속됩니다)", 4000);
       }
 
       // 업로드 전 현재 업로드할 파일의 SHA 값과 비교하여 중복 업로드 방지 로직은 플랫폼별 업로드 함수에서 처리함

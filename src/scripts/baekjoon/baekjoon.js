@@ -3,6 +3,7 @@ import { SubmissionChecker } from "@/commons/loader-service.js";
 import log from "@/commons/logger.js";
 import { isEmpty, isNull } from "@/commons/util.js";
 import { checkEnable } from "@/commons/enable.js";
+import { getObjectFromLocalStorage, STORAGE_KEYS } from "@/commons/storage.js";
 import { RESULT_MESSAGE } from "@/baekjoon/variables.js";
 import { findUsername, startUpload, markUploadedCSS, isExistResultTable, startMonitoringToast } from "@/baekjoon/util.js";
 import { findData, parseProblemDescription, parsingResultTableList } from "@/baekjoon/parsing.js";
@@ -89,7 +90,7 @@ class BaekjoonHub extends PlatformHubBase {
     
     let table; // Declare table in a broader scope
 
-    const checker = () => {
+    const checker = async () => {
       log.debug("BaekjoonHub Debug - Checking for result table...");
 
       if (!isExistResultTable()) {
@@ -120,7 +121,7 @@ class BaekjoonHub extends PlatformHubBase {
         return false;
       }
 
-      const isValid = this.isValidSubmission(data);
+      const isValid = await this.isValidSubmission(data);
       log.debug("BaekjoonHub Debug - Is valid submission:", isValid);
       return isValid;
     };
@@ -160,11 +161,11 @@ class BaekjoonHub extends PlatformHubBase {
   }
 
   /**
-   * Check if submission data represents a valid successful submission
+   * Check if submission data represents a valid submission based on settings
    * @param {Object} data - Submission data from result table
-   * @returns {boolean}
+   * @returns {Promise<boolean>}
    */
-  isValidSubmission(data) {
+  async isValidSubmission(data) {
     if (!data) {
       log.debug("BaekjoonHub Debug - No data provided for validation");
       return false;
@@ -190,6 +191,9 @@ class BaekjoonHub extends PlatformHubBase {
       return false;
     }
 
+    // Get upload failed submissions setting
+    const uploadFailedSubmissions = await getObjectFromLocalStorage(STORAGE_KEYS.UPLOAD_FAILED_SUBMISSIONS);
+
     // Check if result indicates success
     const isAccepted =
       result === RESULT_MESSAGE.ac || result === RESULT_MESSAGE.Accepted || result === "맞았습니다!!" || result === "Accepted" || result.includes("맞았습니다") || result.startsWith("100");
@@ -197,9 +201,12 @@ class BaekjoonHub extends PlatformHubBase {
     log.debug("BaekjoonHub Debug - Result validation:", {
       result: result,
       isAccepted: isAccepted,
+      uploadFailedSubmissions: uploadFailedSubmissions,
     });
 
-    return isAccepted;
+    // If uploadFailedSubmissions is true, accept any submission
+    // Otherwise, only accept successful submissions
+    return uploadFailedSubmissions || isAccepted;
   }
 }
 

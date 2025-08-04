@@ -4,7 +4,8 @@ import { getDateString, convertImageTagToAbsoluteURL } from "@/commons/ui-util.j
 import { updateProblemData, getProblemData, updateSubmitCodeData, getSubmitCodeData, updateSolvedACData, getSolvedACData } from "@/baekjoon/storage.js";
 import { languages, bjLevel, RESULT_CATEGORY, uploadState } from "@/baekjoon/variables.js";
 import { findUsername, isExistResultTable, markUploadFailedCSS, selectBestSubmissionList, convertResultTableHeader, langVersionRemove } from "@/baekjoon/util.js";
-import { getDirNameByTemplate } from "@/commons/storage.js";
+import { getDirNameByTemplate, getObjectFromLocalStorage } from "@/commons/storage.js";
+import { STORAGE_KEYS } from "@/constants/registry.js";
 import urls from "@/constants/url.js";
 
 /**
@@ -248,12 +249,24 @@ export async function findData(inputData) {
         return null;
       }
 
-      // 맞은 문제만 필터링
-      table = filter(table, {
-        resultCategory: RESULT_CATEGORY.RESULT_ACCEPTED,
-        username: findUsername(),
-        language: table[0]["language"],
-      });
+      // uploadFailedSubmissions 설정 확인
+      const uploadFailedSubmissions = await getObjectFromLocalStorage(STORAGE_KEYS.UPLOAD_FAILED_SUBMISSIONS);
+      
+      // 설정에 따라 필터링
+      if (uploadFailedSubmissions) {
+        // 모든 결과를 포함 (사용자와 언어만 필터링)
+        table = filter(table, {
+          username: findUsername(),
+          language: table[0]["language"],
+        });
+      } else {
+        // 맞은 문제만 필터링
+        table = filter(table, {
+          resultCategory: RESULT_CATEGORY.RESULT_ACCEPTED,
+          username: findUsername(),
+          language: table[0]["language"],
+        });
+      }
 
       if (isEmpty(table)) {
         log.error("findData - No accepted submissions found");

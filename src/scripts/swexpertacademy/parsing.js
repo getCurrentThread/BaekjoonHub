@@ -2,7 +2,7 @@ import { isNull, convertSingleCharToDoubleChar } from "@/commons/util.js";
 import { getProblemData, updateProblemData } from "@/swexpertacademy/storage.js";
 import { languages } from "@/swexpertacademy/variables.js";
 import { getNickname } from "@/swexpertacademy/util.js";
-import { getDirNameByTemplate } from "@/commons/storage.js";
+import { getDirNameByTemplate, getObjectFromLocalStorage, STORAGE_KEYS } from "@/commons/storage.js";
 import urls from "@/constants/url.js";
 import log from "@/commons/logger.js";
 
@@ -13,7 +13,7 @@ export function updateTextSourceEvent() {
 }
 
 export async function makeData(origin) {
-  const { link, problemId, level, languageExtension, title, runtime, memory, code, length, submissionTime, language } = origin;
+  const { link, problemId, level, languageExtension, title, runtime, memory, code, length, submissionTime, language, result } = origin;
   /*
    * SWEA의 경우에는 JAVA 같이 모두 대문자인 경우가 존재합니다. 하지만 타 플랫폼들(백준, 프로그래머스)는 첫문자가 모두 대문자로 시작합니다.
    * 그래서 이와 같은 케이스를 처리를 위해 첫문자만 대문자를 유지하고 나머지 문자는 소문자로 변환합니다.
@@ -37,6 +37,9 @@ export async function makeData(origin) {
     link,
   });
 
+  // 결과에 따른 성공/실패 표시
+  // const isPass = result && result.toUpperCase() === "PASS";
+  // const resultPrefix = isPass ? "" : "[Failed] ";
   const message = `[${level}] Title: ${title}, Time: ${runtime}, Memory: ${memory} -BaekjoonHub`;
   const fileName = `${convertSingleCharToDoubleChar(title)}.${languageExtension}`;
   const dateInfo = submissionTime;
@@ -88,9 +91,19 @@ export async function parseData() {
 
   log.debug("사용자 로그인 정보 및 유무 체크", nickname, document.querySelector("#problemForm div.info"));
   // 검색하는 유저 정보와 로그인한 유저의 닉네임이 같은지 체크
-  // PASS를 맞은 기록 유무 체크
   if (getNickname() !== nickname) return;
   if (isNull(document.querySelector("#problemForm div.info"))) return;
+  
+  // uploadFailedSubmissions 설정 확인
+  const uploadFailedSubmissions = await getObjectFromLocalStorage(STORAGE_KEYS.UPLOAD_FAILED_SUBMISSIONS);
+  
+  // 결과 확인
+  const resultElement = document.querySelector("#problemForm div.info > ul > li:first-child > span:last-child");
+  const result = resultElement ? resultElement.textContent.trim() : "";
+  const isPass = result.toUpperCase() === "PASS";
+  
+  // uploadFailedSubmissions가 false이고 PASS가 아닌 경우 return
+  if (!uploadFailedSubmissions && !isPass) return;
 
   log.debug("결과 데이터 파싱 시작");
 
@@ -142,5 +155,6 @@ export async function parseData() {
     length,
     submissionTime,
     language,
+    result,
   });
 }

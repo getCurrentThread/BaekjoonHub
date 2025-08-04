@@ -11,6 +11,7 @@ let appSettings = {
   repoName: "",
   autoUpload: true,
   useCustomTemplate: false,
+  uploadFailedSubmissions: false,
   templateString: "{{language}}/{{removeAfterSpace(level)}}/{{problemId}}. {{safe(title)}}",
 };
 
@@ -34,6 +35,7 @@ const elements = {
   connectRepo: document.getElementById("connectRepo"),
   autoUpload: document.getElementById("autoUpload"),
   useCustomTemplate: document.getElementById("useCustomTemplate"),
+  uploadFailedSubmissions: document.getElementById("uploadFailedSubmissions"),
   customTemplateInput: document.getElementById("customTemplateInput"),
   templateString: document.getElementById("templateString"),
   templatePreview: document.getElementById("templatePreview"),
@@ -95,7 +97,15 @@ function updateConnectionStatus() {
 // 모드 감지 및 설정
 async function detectAndSetMode() {
   try {
-    const data = await getObjectFromLocalStorage([STORAGE_KEYS.MODE_TYPE, STORAGE_KEYS.HOOK, STORAGE_KEYS.TOKEN, STORAGE_KEYS.ENABLE, STORAGE_KEYS.USE_CUSTOM_TEMPLATE, STORAGE_KEYS.DIR_TEMPLATE]);
+    const data = await getObjectFromLocalStorage([
+      STORAGE_KEYS.MODE_TYPE, 
+      STORAGE_KEYS.HOOK, 
+      STORAGE_KEYS.TOKEN, 
+      STORAGE_KEYS.ENABLE, 
+      STORAGE_KEYS.USE_CUSTOM_TEMPLATE, 
+      STORAGE_KEYS.DIR_TEMPLATE,
+      STORAGE_KEYS.UPLOAD_FAILED_SUBMISSIONS
+    ]);
 
     const modeType = data[STORAGE_KEYS.MODE_TYPE];
     const hook = data[STORAGE_KEYS.HOOK];
@@ -103,6 +113,7 @@ async function detectAndSetMode() {
     const enabled = data[STORAGE_KEYS.ENABLE];
     const useCustomTemplate = data[STORAGE_KEYS.USE_CUSTOM_TEMPLATE];
     const dirTemplate = data[STORAGE_KEYS.DIR_TEMPLATE];
+    const uploadFailedSubmissions = data[STORAGE_KEYS.UPLOAD_FAILED_SUBMISSIONS];
 
     if (modeType === "commit" && hook) {
       if (!token) {
@@ -116,6 +127,7 @@ async function detectAndSetMode() {
       appSettings.repoName = hook;
       appSettings.autoUpload = enabled !== false;
       appSettings.useCustomTemplate = useCustomTemplate || false;
+      appSettings.uploadFailedSubmissions = uploadFailedSubmissions || false;
       appSettings.templateString = dirTemplate || "{{language}}/{{level}}/{{problemId}}. {{title}}";
 
       updateConnectionStatus();
@@ -196,6 +208,9 @@ function updateFormValues() {
   if (elements.useCustomTemplate) {
     elements.useCustomTemplate.checked = appSettings.useCustomTemplate;
     elements.customTemplateInput.style.display = appSettings.useCustomTemplate ? "block" : "none";
+  }
+  if (elements.uploadFailedSubmissions) {
+    elements.uploadFailedSubmissions.checked = appSettings.uploadFailedSubmissions;
   }
   if (elements.templateString) {
     elements.templateString.value = appSettings.templateString;
@@ -412,6 +427,7 @@ async function saveSettings() {
       [STORAGE_KEYS.ENABLE]: appSettings.autoUpload,
       [STORAGE_KEYS.USE_CUSTOM_TEMPLATE]: appSettings.useCustomTemplate,
       [STORAGE_KEYS.DIR_TEMPLATE]: appSettings.templateString,
+      [STORAGE_KEYS.UPLOAD_FAILED_SUBMISSIONS]: appSettings.uploadFailedSubmissions,
     });
   } catch (error) {
     log.error("Settings save error:", error);
@@ -455,6 +471,13 @@ function setupEventListeners() {
     elements.useCustomTemplate.addEventListener("change", async (e) => {
       appSettings.useCustomTemplate = e.target.checked;
       elements.customTemplateInput.style.display = e.target.checked ? "block" : "none";
+      await saveSettings();
+    });
+  }
+
+  if (elements.uploadFailedSubmissions) {
+    elements.uploadFailedSubmissions.addEventListener("change", async (e) => {
+      appSettings.uploadFailedSubmissions = e.target.checked;
       await saveSettings();
     });
   }

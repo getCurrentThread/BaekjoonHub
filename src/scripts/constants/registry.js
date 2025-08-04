@@ -11,4 +11,5 @@ export const STORAGE_KEYS = {
   PIPE: "baekjoonhub_pipe",
   IS_SYNC: "baekjoonhub_is_sync",
   SWEA: "baekjoonhub_swea",
+  UPLOAD_FAILED_SUBMISSIONS: "baekjoonhub_upload_failed_submissions",
 };

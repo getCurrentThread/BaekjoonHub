@@ -42,6 +42,10 @@ export async function makeData({
     link,
   });
 
+  // 결과에 따른 성공/실패 표시
+  // 구름레벨은 DOM에서 결과를 직접 확인할 수 있습니다
+  const resultElement = document.querySelector("#FrameBody div > p[class] > span");
+  // const isSuccess = resultElement && resultElement.textContent === "정답입니다.";
   const message = `[난이도 ${level}] Title: ${title}, Time: ${runtime}, Memory: ${memory} -BaekjoonHub`;
   const fileName = `${convertSingleCharToDoubleChar(title)}.${languageExtension}`;
   const dateInfo = getDateString(new Date(Date.now()));

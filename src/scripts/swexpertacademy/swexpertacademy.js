@@ -2,6 +2,7 @@ import PlatformHubBase from "@/commons/platformhub-base.js";
 import { SubmissionChecker } from "@/commons/loader-service.js";
 import { Toast } from "@/commons/toast.js";
 import { checkEnable } from "@/commons/enable.js";
+import { getObjectFromLocalStorage, STORAGE_KEYS } from "@/commons/storage.js";
 
 import { parseCode, parseData } from "@/swexpertacademy/parsing.js";
 import uploadOneSolveProblemOnGit from "@/swexpertacademy/uploadfunctions.js";
@@ -65,20 +66,36 @@ class SWExpertAcademyHub extends PlatformHubBase {
   /**
    * Start monitoring for successful submissions
    */
-  startSubmissionMonitoring() {
+  async startSubmissionMonitoring() {
     Toast.info("SW Expert Academy 문제 모니터링을 시작합니다.");
     
-    const checker = SubmissionChecker.createTextChecker("div.popup_layer.show > div > p.txt", "pass입니다", { caseSensitive: false });
+    // Get upload failed submissions setting
+    const uploadFailedSubmissions = await getObjectFromLocalStorage(STORAGE_KEYS.UPLOAD_FAILED_SUBMISSIONS);
+    
+    let checker;
+    if (uploadFailedSubmissions) {
+      // Check for any popup result (both success and failure)
+      checker = SubmissionChecker.createCustomChecker(() => {
+        const popupText = document.querySelector("div.popup_layer.show > div > p.txt");
+        if (!popupText) return false;
+        const text = popupText.textContent?.toLowerCase() || "";
+        // Accept both pass and fail messages
+        return text.includes("pass") || text.includes("fail") || text.includes("실패");
+      });
+    } else {
+      // Only check for success
+      checker = SubmissionChecker.createTextChecker("div.popup_layer.show > div > p.txt", "pass입니다", { caseSensitive: false });
+    }
 
     const onSuccess = async () => {
-      log.info("정답이 나왔습니다. 코드를 파싱합니다");
+      log.info("결과가 나왔습니다. 코드를 파싱합니다");
 
       try {
         const { contestProbId } = await parseCode();
         const redirectUrl = this.buildRedirectUrl(contestProbId);
         await makeSubmitButton(redirectUrl);
       } catch (error) {
-        log.error("Error processing SWEA success:", error);
+        log.error("Error processing SWEA result:", error);
       }
     };
 

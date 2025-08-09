@@ -14,8 +14,8 @@ module.exports = {
     swexpertacademy: "./src/scripts/swexpertacademy/swexpertacademy.js",
     goormlevel: "./src/scripts/goormlevel/goormlevel.js",
     oauth2: "./src/scripts/commons/oauth2.js",
-    popup: "./src/popup.js",
-    settings: "./src/settings.js",
+    popup: "./src/popup.jsx",
+    settings: "./src/settings.jsx",
   },
   output: {
     path: path.resolve(__dirname, "dist"),
@@ -37,13 +37,38 @@ module.exports = {
       ],
     }),
   ],
+  module: {
+    rules: [
+      {
+        test: /\.(js|jsx|ts|tsx)$/,
+        exclude: /node_modules/,
+        use: {
+          loader: 'babel-loader',
+          options: {
+            presets: [
+              ['@babel/preset-env', {
+                targets: {
+                  chrome: "88"
+                }
+              }],
+              ['@babel/preset-react', {
+                runtime: 'automatic',
+                development: false,
+                importSource: 'react'
+              }]
+            ]
+          }
+        }
+      }
+    ]
+  },
   resolve: {
-    extensions: [".js", ".jsx", ".json"],
+    extensions: [".js", ".jsx", ".ts", ".tsx", ".json"],
     alias: {
       sha1: "js-sha1",
-
       filesaver: "file-saver",
       "@": path.resolve(__dirname, "src/scripts"),
+      "@components": path.resolve(__dirname, "src/components"),
     },
   },
 };

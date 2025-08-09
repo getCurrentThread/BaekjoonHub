@@ -1,17 +1,47 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { Toast } from "@/commons/toast.js";
+import log from "@/commons/logger.js";
+import { ToastSuccessMessage } from "@components/ToastSuccess.jsx";
+import { ToastFailureMessage } from "@components/ToastFailure.jsx";
+import { ToastInfoMessage } from "@components/ToastInfo.jsx";
+
 /**
- * 업로드 실패 아이콘을 표시합니다.
- *
- * @param {Object} uploadState - 업로드 상태를 관리하는 객체
+ * 업로드 시작 알림 (공통)
+ * 모든 플랫폼에서 사용할 수 있는 통합 시작 알림 함수
+ */
+export function startUpload() {
+  Toast.info("🚀 GitHub 업로드를 시작합니다!", 3000);
+  log.debug("startUpload: Upload start toast displayed");
+}
+
+/**
+ * 업로드 실패 알림 (공통)
+ * 모든 플랫폼에서 사용할 수 있는 통합 실패 알림 함수
+ * 
+ * @param {Object} uploadState - 업로드 상태를 관리하는 객체 (선택적)
  */
 export function markUploadFailedCSS(uploadState) {
   if (uploadState) {
     uploadState.uploading = false;
   }
 
-  const elem = document.getElementById("baekjoonHubProgressElem");
-  if (!elem) return;
-
-  elem.className = "markuploadfailed";
+  const toast = Toast.danger("", 5000);
+  
+  // React 컴포넌트를 사용하여 Toast 내용 렌더링
+  if (toast && toast.element) {
+    const messageContainer = toast.element.querySelector(".message-container");
+    if (messageContainer) {
+      messageContainer.innerHTML = '';
+      const reactContainer = document.createElement('div');
+      messageContainer.appendChild(reactContainer);
+      
+      const root = createRoot(reactContainer);
+      root.render(React.createElement(ToastFailureMessage));
+    }
+  }
+  
+  log.debug("markUploadFailedCSS: Upload failure toast displayed");
 }
 
 /**
@@ -68,32 +98,56 @@ export function initUploadUI(targetElement, uploadState) {
 }
 
 /**
- * 업로드 완료 아이콘을 표시하고 GitHub 링크를 연결합니다.
+ * 업로드 완료 알림 (공통)
+ * 모든 플랫폼에서 사용할 수 있는 통합 성공 알림 함수
+ * React 컴포넌트를 사용하여 클릭 가능한 GitHub 링크를 제공
  *
  * @param {Object} branches - 브랜치 정보 ('userName/repositoryName': 'branchName')
  * @param {string} directory - 디렉토리 경로 ('백준/Gold/1000. A+B')
- * @param {Object} uploadState - 업로드 상태를 관리하는 객체
+ * @param {Object} uploadState - 업로드 상태를 관리하는 객체 (선택적)
  */
 export function markUploadedCSS(branches, directory, uploadState) {
   if (uploadState) {
     uploadState.uploading = false;
   }
 
-  const elem = document.getElementById("baekjoonHubProgressElem");
-  if (!elem) return;
-
-  elem.className = "markuploaded";
-
   // GitHub 링크 생성
   const repoName = Object.keys(branches)[0];
   const branchName = branches[repoName];
   const uploadedUrl = `https://github.com/${repoName}/tree/${branchName}/${directory}`;
 
-  // 클릭 이벤트 등록
-  elem.addEventListener("click", () => {
-    window.location.href = uploadedUrl;
-  });
-  elem.style.cursor = "pointer";
+  // 성공 Toast에 클릭 가능한 링크 표시 (React 컴포넌트 사용)
+  const directoryParts = directory.split("/");
+  const problemInfo = directoryParts[directoryParts.length - 1] || directory;
+  const toast = Toast.success("", 8000);
+
+  // Toast 클릭 시 GitHub 페이지로 이동
+  if (toast && toast.element) {
+    toast.element.style.cursor = "pointer";
+
+    // React 컴포넌트를 사용하여 Toast 내용 렌더링
+    const messageContainer = toast.element.querySelector(".message-container");
+    if (messageContainer) {
+      // 기존 내용을 지우고 React 컴포넌트로 교체
+      messageContainer.innerHTML = '';
+      const reactContainer = document.createElement('div');
+      messageContainer.appendChild(reactContainer);
+      
+      const root = createRoot(reactContainer);
+      root.render(
+        React.createElement(ToastSuccessMessage, {
+          problemInfo: problemInfo,
+          onGitHubClick: () => window.open(uploadedUrl, "_blank")
+        })
+      );
+    }
+
+    toast.element.addEventListener("click", () => {
+      window.open(uploadedUrl, "_blank");
+    });
+  }
+
+  log.debug("markUploadedCSS: Upload success toast displayed");
 }
 
 /**

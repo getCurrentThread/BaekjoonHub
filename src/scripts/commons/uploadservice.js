@@ -88,50 +88,64 @@ export default class UploadService {
     try {
       const git = new GitHub(hook, token);
 
+      // Extract code content for logging
+      const codeContent = typeof code === 'object' ? (code.code || code.content || JSON.stringify(code)) : code;
+      
       log.info("UploadService: Starting GitHub upload", {
         hook,
         directory,
         fileName,
-        codeLength: code?.length,
+        codeLength: codeContent?.length,
         readmeLength: readme?.length,
       });
 
-      // Upload source code file
+      // Prepare files for upload
+      const filesToUpload = [];
+      
+      // Add source code file
       if (!isNull(code) && !isEmpty(code)) {
-        const codeFilePath = `${directory}/${fileName}`;
-        const codeResult = await git.updateFile(codeFilePath, commitMessage, code);
-
-        if (codeResult && codeResult.sha) {
-          log.info("UploadService: Code file uploaded successfully", {
-            path: codeFilePath,
-            sha: codeResult.sha,
-          });
-
-          // Update stats using centralized storage
-          await this.updateSubmissionStats(`${hook}/${codeFilePath}`, codeResult.sha);
-        }
+        // Extract actual code content if it's an object
+        const codeContent = typeof code === 'object' ? (code.code || code.content || JSON.stringify(code)) : code;
+        log.debug("UploadService: Code content type:", typeof codeContent, "length:", codeContent?.length);
+        
+        filesToUpload.push({
+          filePath: `${directory}/${fileName}`,
+          content: codeContent
+        });
       }
 
-      // Upload README file
+      // Add README file
       if (!isNull(readme) && !isEmpty(readme)) {
-        const readmeFilePath = `${directory}/README.md`;
-        const readmeResult = await git.updateFile(readmeFilePath, commitMessage, readme);
+        filesToUpload.push({
+          filePath: `${directory}/README.md`,
+          content: readme
+        });
+      }
 
-        if (readmeResult && readmeResult.sha) {
-          log.info("UploadService: README file uploaded successfully", {
-            path: readmeFilePath,
-            sha: readmeResult.sha,
+      // Upload all files in a single commit
+      if (filesToUpload.length > 0) {
+        const result = await git.updateMultipleFiles(filesToUpload, commitMessage);
+
+        if (result && result.sha) {
+          log.info("UploadService: All files uploaded successfully", {
+            files: result.files,
+            sha: result.sha,
           });
 
-          // Update stats using centralized storage
-          await this.updateSubmissionStats(`${hook}/${readmeFilePath}`, readmeResult.sha);
+          // Update stats for all uploaded files
+          for (const filePath of result.files) {
+            await this.updateSubmissionStats(`${hook}/${filePath}`, result.sha);
+          }
         }
       }
 
       // Execute callback if provided
       if (callback && typeof callback === "function") {
         try {
-          callback();
+          // Create branches object for callback
+          const branches = {};
+          branches[hook] = await git.getDefaultBranchOnRepo();
+          callback(branches, directory || "");
         } catch (callbackError) {
           log.error("UploadService: Error executing callback:", callbackError);
         }

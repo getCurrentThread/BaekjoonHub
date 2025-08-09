@@ -3,12 +3,12 @@
  * Handles Baekjoon problem parsing with centralized state management
  */
 
-import { isNull, unescapeHtml } from "@scripts/commons/util.js";
+import { isNull, unescapeHtml, convertSingleCharToDoubleChar, parseNumberFromString, isEmpty, filter } from "@scripts/commons/util.js";
 import log from "@scripts/commons/logger.js";
 import { getDateString } from "@scripts/commons/ui-util.js";
 import { updateProblemData, getProblemData, updateSubmitCodeData, getSubmitCodeData } from "@scripts/baekjoon/storage.js";
-import { RESULT_CATEGORY } from "@scripts/baekjoon/variables.js";
-import { convertResultTableHeader } from "@scripts/baekjoon/util.js";
+import { RESULT_CATEGORY, languages, bjLevel } from "@scripts/baekjoon/variables.js";
+import { convertResultTableHeader, findUsername, isExistResultTable } from "@scripts/baekjoon/util.js";
 import { getDirNameByTemplate } from "@/storage/storageAdapter.js"; // Use centralized storage
 import PlatformHubBase from "@scripts/commons/platformhub-base.js";
 import urls from "@scripts/constants/url.js";
@@ -415,50 +415,434 @@ export function parsingResultTableList(doc = document) {
 }
 
 /**
- * Find data from submission result (legacy compatibility)
+ * Find problem info and submission code
  */
-export function findData(submissionData) {
+export async function findProblemInfoAndSubmissionCode(problemId, submissionId) {
+  log.debug("findProblemInfoAndSubmissionCode - problemId:", problemId, "submissionId:", submissionId);
+
+  if (isNull(problemId) || isNull(submissionId)) {
+    log.error("findProblemInfoAndSubmissionCode - problemId or submissionId is null");
+    return null;
+  }
+
   try {
-    if (!submissionData) {
-      log.warn("No submission data provided to findData");
+    const [description, code, solvedJson] = await Promise.all([getProblemDescriptionById(problemId), getSubmitCodeById(submissionId), getSolvedACById(problemId)]);
+
+    log.debug("findProblemInfoAndSubmissionCode - fetched data:", {
+      description: description ? "exists" : "null",
+      code: code ? "exists" : "null",
+      solvedJson: solvedJson ? "exists" : "null",
+    });
+
+    if (!description || !code || !solvedJson) {
+      log.error("findProblemInfoAndSubmissionCode - missing data");
       return null;
     }
 
-    const { problemId, language, submissionId } = submissionData;
+    const problemTags =
+      solvedJson.tags
+        ?.flatMap((tag) => tag.displayNames)
+        ?.filter((tag) => tag.language === "ko")
+        ?.map((tag) => tag.name) || [];
+
+    const title = solvedJson.titleKo;
+    const level = bjLevel[solvedJson.level];
+
+    const problemDescription = description?.problemDescription;
+    const problemInput = description?.problemInput;
+    const problemOutput = description?.problemOutput;
 
     return {
-      bojData: {
-        problemId: problemId,
-        language: language,
-        submissionId: submissionId,
-        timestamp: Date.now(),
-      },
+      problemId,
+      submissionId,
+      title,
+      level,
+      code,
+      problemDescription,
+      problemInput,
+      problemOutput,
+      problemTags,
     };
-  } catch (error) {
-    log.error("Error in findData:", error);
+  } catch (err) {
+    log.error("findProblemInfoAndSubmissionCode - error occurred:", err);
     return null;
   }
 }
 
 /**
- * Parse problem description from current page
+ * Make detail message and readme content
  */
-export function parseProblemDescription() {
+export async function makeDetailMessageAndReadme(data) {
+  log.debug("makeDetailMessageAndReadme - input data:", data);
+
+  if (isNull(data)) {
+    log.error("makeDetailMessageAndReadme - data is null");
+    return null;
+  }
+
+  // 구 버전과 새 버전의 변수명 모두 지원
+  const problemId = data.problemId;
+  const result = data.result;
+  const title = data.title;
+  const level = data.level;
+  const problemTags = data.problemTags || data.problem_tags || [];
+  const submissionTime = data.submissionTime;
+  const code = data.code;
+  const language = data.language;
+  const memory = data.memory;
+  const runtime = data.runtime;
+
+  // 필수 데이터 검증
+  if (isNull(problemId) || isNull(title) || isNull(code) || isNull(language)) {
+    log.error("makeDetailMessageAndReadme - Missing required data:", {
+      problemId: problemId,
+      title: title,
+      code: code ? "exists" : "null",
+      language: language,
+    });
+    return null;
+  }
+
+  const score = parseNumberFromString(result || "");
+
+  // 언어 정보 처리
+  const processedLanguage = langVersionRemove(language, null);
+
+  // 기본 디렉토리 경로 생성
+  const baseDirPath = `백준/${level.replace(/ .*/, "")}/${problemId}. ${convertSingleCharToDoubleChar(title)}`;
+
+  // 템플릿을 사용한 디렉토리 경로 생성
+  let directory = baseDirPath; // 기본값으로 설정
+
+  // 수정된 커밋 메시지 (Title 부분 수정)
+  const message = `[${level}] Title: ${title}, Time: ${runtime} ms, Memory: ${memory} KB${Number.isNaN(score) ? "" : `, Score: ${score} point`} -BaekjoonHub`;
+
+  const category = problemTags.join(", ");
+  const fileName = `${convertSingleCharToDoubleChar(title)}.${languages[processedLanguage] || "txt"}`;
+  const dateInfo = submissionTime ?? getDateString(new Date(Date.now()));
+
+  // prettier-ignore-start
+  const readme =
+    `# [${level}] ${title} - ${problemId} \n\n` +
+    `[문제 링크](${urls.BAEKJOON_PROBLEM_URL}${problemId}) \n\n` +
+    `### 성능 요약\n\n` +
+    `메모리: ${memory} KB, ` +
+    `시간: ${runtime} ms\n\n` +
+    `### 분류\n\n` +
+    `${category || "Empty"}\n\n${dateInfo ? `### 제출 일자\n\n${dateInfo}` : ""}`;
+  // prettier-ignore-end
+
+  return {
+    directory,
+    fileName,
+    message,
+    readme,
+    code,
+  };
+}
+
+/**
+ * Find data from submission result with complete upload data
+ */
+export async function findData(inputData) {
   try {
-    const problemIdMatch = window.location.href.match(/\/problem\/(\d+)/);
-    if (!problemIdMatch) {
-      log.warn("Could not extract problem ID from URL");
+    let data = inputData;
+    log.debug("findData - inputData:", data);
+
+    // 데이터가 없는 경우 결과 테이블에서 가져오기 (구 버전 호환성)
+    if (isNull(data)) {
+      log.debug("findData - No input data, searching from result table");
+
+      if (!isExistResultTable()) {
+        log.error("findData - Result table not found");
+        return null;
+      }
+
+      let table = parsingResultTableList();
+      if (isEmpty(table)) {
+        log.error("findData - Empty result table");
+        return null;
+      }
+
+      // 맞은 문제만 필터링
+      table = filter(table, {
+        resultCategory: RESULT_CATEGORY.RESULT_ACCEPTED,
+        username: findUsername(),
+        language: table[0]["language"],
+      });
+
+      if (isEmpty(table)) {
+        log.error("findData - No accepted submissions found");
+        return null;
+      }
+
+      data = selectBestSubmissionList(table)[0];
+    }
+
+    // 필수 데이터 검증
+    if (isNull(data.problemId) || isNull(data.submissionId)) {
+      log.error("findData - Missing required data:", {
+        problemId: data.problemId,
+        submissionId: data.submissionId,
+      });
       return null;
     }
 
-    const problemId = problemIdMatch[1];
-    const titleElement = document.querySelector("#problem_title");
-    const title = titleElement ? titleElement.textContent.trim() : `Problem ${problemId}`;
+    // 대회 문제 검증
+    if (Number.isNaN(Number(data.problemId)) || Number(data.problemId) < 1000) {
+      throw new Error(`정책상 대회 문제는 업로드 되지 않습니다. 대회 문제가 아니라고 판단된다면 이슈로 남겨주시길 바랍니다.\n문제 ID: ${data.problemId}`);
+    }
 
-    log.info(`Parsed problem: ${problemId}. ${title}`);
-    return { problemId, title };
+    // 문제 정보와 코드 가져오기
+    const problemInfoAndCode = await findProblemInfoAndSubmissionCode(data.problemId, data.submissionId);
+    log.debug("findData - problemInfoAndCode:", problemInfoAndCode);
+
+    if (isNull(problemInfoAndCode)) {
+      log.error("findData - Failed to fetch problem info and code");
+      return null;
+    }
+
+    // 데이터 합치기
+    const mergedData = preProcessEmptyObj({ ...data, ...problemInfoAndCode });
+    log.debug("findData - mergedData:", mergedData);
+
+    // 상세 정보 생성
+    const detail = await makeDetailMessageAndReadme(mergedData);
+    if (isNull(detail)) {
+      log.error("findData - Failed to create detail message and readme");
+      return null;
+    }
+
+    // 최종 데이터 반환
+    return { ...data, ...problemInfoAndCode, ...detail };
+  } catch (error) {
+    log.error("findData - Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Parse problem description from current page or document
+ */
+export function parseProblemDescription(doc = document) {
+  try {
+    let problemId = null;
+    
+    log.debug("parseProblemDescription - attempting to parse from doc");
+    
+    // First try to extract from URL (for problem pages)
+    const problemIdMatch = window.location.href.match(/\/problem\/(\d+)/);
+    if (problemIdMatch) {
+      problemId = problemIdMatch[1];
+      log.debug("parseProblemDescription - extracted from URL:", problemId);
+    } else {
+      // Try to extract from title element (fallback method)
+      const titleElement = doc.querySelector("title");
+      if (titleElement) {
+        const titleText = titleElement.textContent;
+        log.debug("parseProblemDescription - title text:", titleText);
+        
+        // Try multiple patterns to extract problem ID from title
+        let titleMatch = titleText.match(/(\d+):/);
+        if (!titleMatch) {
+          titleMatch = titleText.match(/문제.*?(\d+)/);
+        }
+        if (!titleMatch) {
+          titleMatch = titleText.match(/(\d+)/); // Any number as last resort
+        }
+        
+        if (titleMatch) {
+          problemId = titleMatch[1];
+          log.debug("parseProblemDescription - extracted from title:", problemId);
+        }
+      }
+    }
+    
+    // If we still don't have problemId, this function might be called from fetchProblemDescriptionById
+    // In that case, the caller will set the problemId manually
+    
+    const titleElement = doc.querySelector("#problem_title");
+    const title = titleElement ? titleElement.textContent.trim() : (problemId ? `Problem ${problemId}` : "Unknown Problem");
+    
+    // Extract problem content
+    const descriptionElement = doc.querySelector("#problem_description");
+    const inputElement = doc.querySelector("#problem_input");
+    const outputElement = doc.querySelector("#problem_output");
+    
+    const problemDescription = descriptionElement ? descriptionElement.innerHTML.trim() : "";
+    const problemInput = inputElement ? inputElement.innerHTML.trim() : "Empty";
+    const problemOutput = outputElement ? outputElement.innerHTML.trim() : "Empty";
+
+    log.debug(`parseProblemDescription - parsed data:`, { 
+      problemId, 
+      title, 
+      hasDescription: !!problemDescription,
+      hasInput: problemInput !== "Empty",
+      hasOutput: problemOutput !== "Empty"
+    });
+
+    // Return data even if problemId is null - caller can set it
+    return { 
+      problemId, 
+      title, 
+      problemDescription, 
+      problemInput, 
+      problemOutput 
+    };
   } catch (error) {
     log.error("Error parsing problem description:", error);
+    return null;
+  }
+}
+
+/**
+ * 누락된 유틸리티 함수들
+ */
+
+// preProcessEmptyObj 함수
+function preProcessEmptyObj(obj) {
+  const result = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined && value !== null && value !== "") {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+// langVersionRemove 함수
+function langVersionRemove(lang, ignores = null) {
+  if (!lang) return lang;
+
+  const ignoreSet = new Set(ignores || []);
+  if (ignoreSet.has(lang)) return lang;
+
+  // Remove version numbers and extra info
+  return lang.split(" ")[0].split("(")[0];
+}
+
+// selectBestSubmissionList 함수
+function selectBestSubmissionList(table) {
+  if (!table || table.length === 0) return [];
+
+  // Group by problem ID and select best submission
+  const grouped = {};
+  table.forEach((item) => {
+    const key = item.problemId;
+    if (!grouped[key] || item.submissionTime > grouped[key].submissionTime) {
+      grouped[key] = item;
+    }
+  });
+
+  return Object.values(grouped);
+}
+
+// getProblemDescriptionById, getSubmitCodeById, getSolvedACById 함수들
+export async function getProblemDescriptionById(problemId) {
+  let problem = await getProblemData(problemId);
+
+  if (isNull(problem)) {
+    problem = await fetchProblemDescriptionById(problemId);
+    if (problem) {
+      await updateProblemData(problemId, problem);
+    }
+  }
+  return problem;
+}
+
+export async function getSubmitCodeById(submissionId) {
+  let code = await getSubmitCodeData(submissionId);
+
+  if (isNull(code)) {
+    code = await fetchSubmitCodeById(submissionId);
+    if (code) {
+      updateSubmitCodeData(submissionId, code);
+    }
+  }
+  return code;
+}
+
+export async function getSolvedACById(problemId) {
+  try {
+    // Use background script to avoid CORS issues
+    log.debug(`Fetching solved.ac data for problemId: ${problemId}`);
+    const jsonData = await chrome.runtime.sendMessage({
+      sender: "baekjoon",
+      task: "SolvedApiCall",
+      problemId,
+    });
+    
+    if (jsonData && jsonData.problemId) {
+      return jsonData;
+    }
+  } catch (error) {
+    log.error("getSolvedACById error:", error);
+  }
+
+  // 기본값 반환
+  return {
+    problemId,
+    titleKo: `문제 ${problemId}`,
+    level: 0,
+    tags: [],
+  };
+}
+
+export async function fetchProblemDescriptionById(problemId) {
+  try {
+    const url = `${urls.BAEKJOON_PROBLEM_URL}${problemId}`;
+    log.debug("fetchProblemDescriptionById - fetching URL:", url);
+    
+    const response = await fetch(url);
+    const html = await response.text();
+
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    
+    // Debug: Check if the page has expected elements
+    const titleElement = doc.querySelector("#problem_title");
+    const descriptionElement = doc.querySelector("#problem_description");
+    log.debug("fetchProblemDescriptionById - page elements check:", {
+      titleExists: !!titleElement,
+      descriptionExists: !!descriptionElement,
+      titleText: titleElement?.textContent?.trim(),
+      pageTitle: doc.querySelector("title")?.textContent?.trim()
+    });
+    
+    const problemData = parseProblemDescription(doc);
+    
+    if (problemData) {
+      // Ensure problemId is set correctly
+      problemData.problemId = problemId;
+    } else {
+      // If parsing failed, create minimal problem data
+      log.warn("fetchProblemDescriptionById - parsing failed, creating minimal data");
+      const title = titleElement ? titleElement.textContent.trim() : `Problem ${problemId}`;
+      const description = descriptionElement ? descriptionElement.innerHTML.trim() : "";
+      const inputElement = doc.querySelector("#problem_input");
+      const outputElement = doc.querySelector("#problem_output");
+      
+      return {
+        problemId,
+        title,
+        problemDescription: description,
+        problemInput: inputElement ? inputElement.innerHTML.trim() : "Empty",
+        problemOutput: outputElement ? outputElement.innerHTML.trim() : "Empty"
+      };
+    }
+    
+    return problemData;
+  } catch (error) {
+    log.error("fetchProblemDescriptionById error:", error);
+    return null;
+  }
+}
+
+export async function fetchSubmitCodeById(submissionId) {
+  try {
+    const response = await fetch(`${urls.BAEKJOON_SOURCE_DOWNLOAD_URL}${submissionId}`);
+    return await response.text();
+  } catch (error) {
+    log.error("fetchSubmitCodeById error:", error);
     return null;
   }
 }

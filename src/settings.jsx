@@ -12,11 +12,16 @@ import { parseTemplateString } from "safe-template-parser";
 import { getTextTransforms } from "./scripts/commons/text-transforms.js";
 import log from "./scripts/commons/logger.js";
 import { SettingsApp } from "@components/SettingsApp.jsx";
+import { AuthRequiredModal } from "@components/AuthRequiredModal.jsx";
 
 /**
  * Main Settings Component with React Hooks
  */
 const SettingsMain = () => {
+  // 인증 상태
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authCheckComplete, setAuthCheckComplete] = useState(false);
+  
   // 연결 상태
   const [connected, setConnected] = useState(false);
   const [repoName, setRepoName] = useState('');
@@ -35,6 +40,48 @@ const SettingsMain = () => {
   const [useCustomTemplate, setUseCustomTemplate] = useState(false);
   const [templateString, setTemplateString] = useState("{{language}}/{{removeAfterSpace(level)}}/{{problemId}}. {{safe(title)}}");
   const [templatePreview, setTemplatePreview] = useState('Python/Silver/1000. A+B.py');
+
+  /**
+   * 인증 상태 확인
+   */
+  const checkAuthStatus = async () => {
+    try {
+      const token = await getObjectFromLocalStorage(STORAGE_KEYS.TOKEN);
+      
+      log.info('Settings: Checking auth status', { hasToken: !!token });
+      
+      if (token) {
+        // 토큰이 유효한지 GitHub API로 확인
+        try {
+          const response = await fetch('https://api.github.com/user', {
+            headers: { Authorization: `token ${token}` }
+          });
+          
+          if (response.ok) {
+            setIsAuthenticated(true);
+            log.info('Settings: Authentication verified');
+          } else {
+            // 토큰이 만료되었거나 잘못됨
+            log.warn('Settings: Token invalid, requiring re-authentication');
+            setIsAuthenticated(false);
+            // 잘못된 토큰 삭제
+            await saveObjectInLocalStorage({ [STORAGE_KEYS.TOKEN]: null });
+          }
+        } catch (error) {
+          log.error('Settings: Token validation error', error);
+          setIsAuthenticated(false);
+        }
+      } else {
+        setIsAuthenticated(false);
+        log.info('Settings: No token found, authentication required');
+      }
+    } catch (error) {
+      log.error('Settings: Auth check error', error);
+      setIsAuthenticated(false);
+    } finally {
+      setAuthCheckComplete(true);
+    }
+  };
 
   /**
    * 초기 설정 로드
@@ -314,46 +361,100 @@ const SettingsMain = () => {
     }
   };
 
-  // 초기 로드 Effect
+  // 인증 상태 확인 Effect
   useEffect(() => {
-    loadInitialSettings();
+    checkAuthStatus();
   }, []);
 
+  // 인증 완료 후 초기 설정 로드 Effect
+  useEffect(() => {
+    if (isAuthenticated && authCheckComplete) {
+      loadInitialSettings();
+    }
+  }, [isAuthenticated, authCheckComplete]);
+
+  // OAuth 완료 후 돌아왔을 때 인증 상태 다시 확인
+  useEffect(() => {
+    const handleStorageChange = (changes, namespace) => {
+      if (namespace === 'local' && changes[STORAGE_KEYS.TOKEN]) {
+        log.info('Settings: Token changed, rechecking auth status');
+        checkAuthStatus();
+      }
+    };
+
+    // Chrome storage change listener 추가
+    if (chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener(handleStorageChange);
+      
+      return () => {
+        chrome.storage.onChanged.removeListener(handleStorageChange);
+      };
+    }
+  }, []);
+
+  // 인증 확인 중이면 로딩 표시
+  if (!authCheckComplete) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        flexDirection: 'column',
+        gap: '16px'
+      }}>
+        <div style={{ fontSize: '24px' }}>🔄</div>
+        <div>인증 상태를 확인하는 중...</div>
+      </div>
+    );
+  }
+
   return (
-    <SettingsApp
-      // 연결 상태
-      connected={connected}
-      repoName={repoName}
+    <>
+      {/* 인증이 필요하면 강제 모달 표시 */}
+      <AuthRequiredModal 
+        isOpen={!isAuthenticated} 
+        onClose={() => {}} 
+      />
+      
+      {/* 인증된 경우에만 설정 앱 표시 */}
+      {isAuthenticated && (
+        <SettingsApp
+          // 연결 상태
+          connected={connected}
+          repoName={repoName}
 
-      // 메시지 (React 19 useActionState 통합)
-      errorMessage={connectState.error || errorMessage}
-      successMessage={connectState.success || successMessage}
-      isConnecting={isPending}
+          // 메시지 (React 19 useActionState 통합)
+          errorMessage={connectState.error || errorMessage}
+          successMessage={connectState.success || successMessage}
+          isConnecting={isPending}
 
-      // 저장소 설정
-      repoType={repoType}
-      repositories={repositories}
+          // 저장소 설정
+          repoType={repoType}
+          repositories={repositories}
 
-      // 설정값
-      autoUpload={autoUpload}
-      useCustomTemplate={useCustomTemplate}
-      templateString={templateString}
-      templatePreview={templatePreview}
+          // 설정값
+          autoUpload={autoUpload}
+          useCustomTemplate={useCustomTemplate}
+          templateString={templateString}
+          templatePreview={templatePreview}
 
-      // 이벤트 핸들러
-      onRepoTypeChange={handleRepoTypeChange}
-      onRepoNameChange={handleRepoNameChange}
-      onRepoSelectChange={handleRepoSelectChange}
-      onConnectRepo={handleConnectRepo}
-      onAutoUploadChange={handleAutoUploadChange}
-      onCustomTemplateChange={handleCustomTemplateChange}
-      onTemplateChange={handleTemplateChange}
-      onTemplateInsert={handleTemplateInsert}
-      onPresetSelect={handlePresetSelect}
-      onSaveTemplate={handleSaveTemplate}
-      onResetTemplate={handleResetTemplate}
-      onUnlinkRepo={handleUnlinkRepo}
-    />
+          // 이벤트 핸들러
+          onRepoTypeChange={handleRepoTypeChange}
+          onRepoNameChange={handleRepoNameChange}
+          onRepoSelectChange={handleRepoSelectChange}
+          onConnectRepo={handleConnectRepo}
+          onAutoUploadChange={handleAutoUploadChange}
+          onCustomTemplateChange={handleCustomTemplateChange}
+          onTemplateChange={handleTemplateChange}
+          onTemplateInsert={handleTemplateInsert}
+          onPresetSelect={handlePresetSelect}
+          onSaveTemplate={handleSaveTemplate}
+          onResetTemplate={handleResetTemplate}
+          onUnlinkRepo={handleUnlinkRepo}
+        />
+      )}
+    </>
   );
 };
 

@@ -102,9 +102,15 @@ export async function createBlob(hook, token, content, path) {
  */
 export async function createTree(hook, token, refSHA, treeItems) {
   log.info("createTree called with hook:", hook, "refSHA:", refSHA);
+  
+  const body = { tree: treeItems };
+  if (refSHA !== null) {
+    body.base_tree = refSHA;
+  }
+  
   return fetch(`${urls.GITHUB_API_REPOS_URL}/${hook}/git/trees`, {
     method: "POST",
-    body: JSON.stringify({ tree: treeItems, base_tree: refSHA }),
+    body: JSON.stringify(body),
     headers: {
       Authorization: `token ${token}`,
       Accept: "application/vnd.github.v3+json",
@@ -132,9 +138,15 @@ export async function createTree(hook, token, refSHA, treeItems) {
  */
 export async function createCommit(hook, token, message, treeSHA, refSHA) {
   log.info("createCommit called with hook:", hook, "message:", message);
+  
+  const body = { message, tree: treeSHA };
+  if (refSHA !== null) {
+    body.parents = [refSHA];
+  }
+  
   return fetch(`${urls.GITHUB_API_REPOS_URL}/${hook}/git/commits`, {
     method: "POST",
-    body: JSON.stringify({ message, tree: treeSHA, parents: [refSHA] }),
+    body: JSON.stringify(body),
     headers: {
       Authorization: `token ${token}`,
       Accept: "application/vnd.github.v3+json",
@@ -148,6 +160,35 @@ export async function createCommit(hook, token, message, treeSHA, refSHA) {
     .then((data) => {
       log.debug("createCommit data:", data);
       return data.sha;
+    });
+}
+
+/** create a reference
+ * @see https://docs.github.com/en/rest/reference/git#create-a-reference
+ * @param {string} hook - the github repository
+ * @param {string} token - the github token
+ * @param {string} ref - the reference name
+ * @param {string} commitSHA - the commit sha
+ * @return {Promise} - the promise for the reference
+ */
+export async function createReference(hook, token, ref, commitSHA) {
+  log.info("createReference called with hook:", hook, "ref:", ref, "commitSHA:", commitSHA);
+  return fetch(`${urls.GITHUB_API_REPOS_URL}/${hook}/git/refs`, {
+    method: "POST",
+    body: JSON.stringify({ ref, sha: commitSHA }),
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: "application/vnd.github.v3+json",
+      "content-type": "application/json",
+    },
+  })
+    .then((res) => {
+      log.debug("createReference response:", res);
+      return res.json();
+    })
+    .then((data) => {
+      log.debug("createReference data:", data);
+      return data.ref;
     });
 }
 
@@ -228,7 +269,13 @@ export class GitHub {
 
   async getReference(branch) {
     // hook, token, branch
-    return getReference(this.hook, this.token, branch);
+    try {
+      return await getReference(this.hook, this.token, branch);
+    } catch (error) {
+      log.debug("getReference failed, might be empty repository:", error);
+      // For empty repositories, return null to indicate first commit
+      return null;
+    }
   }
 
   async getDefaultBranchOnRepo() {
@@ -252,6 +299,12 @@ export class GitHub {
     return createCommit(this.hook, this.token, message, treeSHA, refSHA);
   }
 
+  async createReference(ref, commitSHA) {
+    // hook, token, ref, commitSHA
+    log.debug("GitHub createReference", "ref:", ref, "commitSHA:", commitSHA);
+    return createReference(this.hook, this.token, ref, commitSHA);
+  }
+
   async updateHead(ref, commitSHA) {
     // hook, token, commitSHA, force = true)
     log.debug("GitHub updateHead", "ref:", ref, "commitSHA:", commitSHA);
@@ -261,5 +314,128 @@ export class GitHub {
   async getTree() {
     // hook, token
     return getTree(this.hook, this.token);
+  }
+  
+  /**
+   * Update or create a file in the repository
+   * @param {string} filePath - The path of the file to update
+   * @param {string} commitMessage - The commit message
+   * @param {string} content - The content of the file
+   * @returns {Promise<object>} - The result object with sha
+   */
+  async updateFile(filePath, commitMessage, content) {
+    log.debug("GitHub updateFile", "filePath:", filePath, "commitMessage:", commitMessage);
+    
+    try {
+      // Get the current reference (null for empty repository)
+      const reference = await this.getReference();
+      const isEmptyRepo = reference === null;
+      
+      log.debug("GitHub updateFile - repository state:", { isEmptyRepo });
+      
+      // Create blob for the file content
+      const blob = await this.createBlob(content, filePath);
+      
+      // Create tree with the new blob
+      let treeResult;
+      if (isEmptyRepo) {
+        treeResult = await this.createTree(null, [blob]);
+      } else {
+        treeResult = await this.createTree(reference.refSHA, [blob]);
+      }
+      log.debug("GitHub updateFile - tree result:", treeResult);
+      
+      // Create commit
+      let commit;
+      if (isEmptyRepo) {
+        commit = await this.createCommit(commitMessage, treeResult, null);
+      } else {
+        commit = await this.createCommit(commitMessage, treeResult, reference.refSHA);
+      }
+      log.debug("GitHub updateFile - commit result:", commit);
+      
+      // Update or create head reference
+      const commitSha = commit.sha || commit;
+      log.debug("GitHub updateFile - using commit sha:", commitSha);
+      
+      if (isEmptyRepo) {
+        await this.createReference("refs/heads/main", commitSha);
+      } else {
+        await this.updateHead(reference.ref, commitSha);
+      }
+      
+      return {
+        sha: commitSha,
+        path: filePath,
+      };
+    } catch (error) {
+      log.error("GitHub updateFile error:", error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Update or create multiple files in a single commit
+   * @param {Array} files - Array of {filePath, content} objects
+   * @param {string} commitMessage - The commit message
+   * @returns {Promise<object>} - The result object with sha
+   */
+  async updateMultipleFiles(files, commitMessage) {
+    log.debug("GitHub updateMultipleFiles", "files:", files.length, "commitMessage:", commitMessage);
+    
+    try {
+      // Get the current reference (null for empty repository)
+      const reference = await this.getReference();
+      const isEmptyRepo = reference === null;
+      
+      log.debug("GitHub updateMultipleFiles - repository state:", { isEmptyRepo });
+      
+      // Create blobs for all files
+      const blobs = await Promise.all(
+        files.map(file => this.createBlob(file.content, file.filePath))
+      );
+      
+      // Create tree
+      let treeResult;
+      if (isEmptyRepo) {
+        // For empty repo, create tree without base_tree
+        treeResult = await this.createTree(null, blobs);
+      } else {
+        // For existing repo, use current reference as base
+        treeResult = await this.createTree(reference.refSHA, blobs);
+      }
+      log.debug("GitHub updateMultipleFiles - tree result:", treeResult);
+      
+      // Create commit
+      let commit;
+      if (isEmptyRepo) {
+        // For empty repo, create commit without parent
+        commit = await this.createCommit(commitMessage, treeResult, null);
+      } else {
+        // For existing repo, use current reference as parent
+        commit = await this.createCommit(commitMessage, treeResult, reference.refSHA);
+      }
+      log.debug("GitHub updateMultipleFiles - commit result:", commit);
+      
+      // Update or create head reference
+      const commitSha = commit.sha || commit;
+      log.debug("GitHub updateMultipleFiles - using commit sha:", commitSha);
+      
+      if (isEmptyRepo) {
+        // For empty repo, create new reference
+        await this.createReference("refs/heads/main", commitSha);
+      } else {
+        // For existing repo, update existing reference
+        await this.updateHead(reference.ref, commitSha);
+      }
+      
+      return {
+        sha: commitSha,
+        files: files.map(f => f.filePath),
+      };
+    } catch (error) {
+      log.error("GitHub updateMultipleFiles error:", error);
+      throw error;
+    }
   }
 }

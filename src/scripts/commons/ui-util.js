@@ -110,14 +110,22 @@ export function markUploadedCSS(branches, directory, uploadState) {
     uploadState.uploading = false;
   }
 
+  // branches 유효성 검사
+  if (!branches || typeof branches !== "object" || Object.keys(branches).length === 0) {
+    log.warn("markUploadedCSS: Invalid branches object:", branches);
+    // branches가 없어도 기본 성공 알림은 표시
+    Toast.success("✅ 업로드가 완료되었습니다!", 5000);
+    return;
+  }
+
   // GitHub 링크 생성
   const repoName = Object.keys(branches)[0];
   const branchName = branches[repoName];
   const uploadedUrl = `https://github.com/${repoName}/tree/${branchName}/${directory}`;
 
   // 성공 Toast에 클릭 가능한 링크 표시 (React 컴포넌트 사용)
-  const directoryParts = directory.split("/");
-  const problemInfo = directoryParts[directoryParts.length - 1] || directory;
+  const directoryParts = (directory || "").split("/");
+  const problemInfo = directoryParts[directoryParts.length - 1] || directory || "문제";
   const toast = Toast.success("", 8000);
 
   // Toast 클릭 시 GitHub 페이지로 이동

@@ -15,35 +15,47 @@ class BaekjoonHub extends PlatformHubBase {
     });
 
     this.username = findUsername();
+
+    // Auto-initialize when constructed
+    this.init().catch((error) => {
+      log.error("BaekjoonHub: Failed to initialize:", error);
+    });
   }
 
   async init() {
+    log.info("BaekjoonHub: Starting initialization...");
+
     const isEnabled = await super.init();
+    log.info("BaekjoonHub: Extension enabled status:", isEnabled);
     if (!isEnabled) return;
 
     // Retry finding username with exponential backoff
     const foundUsername = await this.retryFindUsername();
+    log.info("BaekjoonHub: Username found:", foundUsername, "Username:", this.username);
     if (!foundUsername) {
       log.warn("Could not find username after multiple retries");
       return;
     }
 
+    this.currentUrl = window.location.href;
+    log.info("BaekjoonHub: Current URL:", this.currentUrl);
+
     const requiredParams = ["status", `user_id=${this.username}`, "problem_id", "from_mine=1"];
 
-    log.debug("BaekjoonHub Debug - Required params:", requiredParams);
-    log.debug(
+    log.info("BaekjoonHub Debug - Required params:", requiredParams);
+    log.info(
       "BaekjoonHub Debug - URL contains all params:",
       requiredParams.every((key) => this.currentUrl.includes(key))
     );
 
     if (requiredParams.every((key) => this.currentUrl.includes(key))) {
-      log.debug("BaekjoonHub Debug - Starting submission monitoring");
+      log.info("BaekjoonHub Debug - Starting submission monitoring");
       this.startSubmissionMonitoring();
     } else if (/\.net\/problem\/\d+/.test(this.currentUrl)) {
-      log.debug("BaekjoonHub Debug - Parsing problem description");
+      log.info("BaekjoonHub Debug - Parsing problem description");
       parseProblemDescription();
     } else {
-      log.debug("BaekjoonHub Debug - No matching URL pattern");
+      log.info("BaekjoonHub Debug - No matching URL pattern, URL:", this.currentUrl);
     }
   }
 

@@ -6,18 +6,38 @@
 import { getToken, getHook, getStats, saveStats, updateStatsSHAfromPath, getStatsSHAfromPath, initializeStorageAdapter, addStorageListener } from "@/storage/storageAdapter.js";
 import { isExtensionEnabled } from "./enable.js";
 import UploadService from "./uploadservice.js";
+import { LoaderFactory } from "./loader-service.js";
 import log from "@scripts/commons/logger.js";
 
 /**
  * Base class for all platform implementations
  * Provides common functionality with centralized storage management
  */
+// Import real Toast for UI notifications
+import { Toast as RealToast } from "./toast.js";
+
 // Toast utility for notifications
 export const Toast = {
-  info: (message) => log.info(`🔔 ${message}`),
-  success: (message) => log.info(`✅ ${message}`),
-  warning: (message) => log.warn(`⚠️ ${message}`),
-  error: (message) => log.error(`❌ ${message}`),
+  info: (message, duration) => {
+    log.info(`🔔 ${message}`);
+    return RealToast.info(message, duration);
+  },
+  success: (message, duration) => {
+    log.info(`✅ ${message}`);
+    return RealToast.success(message, duration);
+  },
+  warning: (message, duration) => {
+    log.warn(`⚠️ ${message}`);
+    return RealToast.warning(message, duration);
+  },
+  error: (message, duration) => {
+    log.error(`❌ ${message}`);
+    return RealToast.danger(message, duration);
+  },
+  danger: (message, duration) => {
+    log.error(`❌ ${message}`);
+    return RealToast.danger(message, duration);
+  },
 };
 
 // Export log and Toast for compatibility
@@ -67,6 +87,28 @@ export default class PlatformHubBase {
    */
   onStorageChange(changes) {
     log.debug(`PlatformHubBase[${this.platformName}]: Storage changed`, Object.keys(changes));
+  }
+
+  /**
+   * Initialize platform hub
+   * @returns {Promise<boolean>} True if initialization successful and extension is enabled
+   */
+  async init() {
+    log.info(`Initializing ${this.platformName} hub`);
+
+    // Check if extension is enabled globally
+    const enabled = await isExtensionEnabled();
+    if (!enabled) {
+      log.info(`${this.platformName} hub is disabled, skipping initialization`);
+      return false;
+    }
+
+    // Initialize the storage adapter if not already done
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    return true;
   }
 
   /**
@@ -340,6 +382,85 @@ export default class PlatformHubBase {
         notification.parentNode.removeChild(notification);
       }
     }, 5000);
+  }
+
+  /**
+   * Generic submission monitoring setup using LoaderService
+   * @param {Function|Object} checker - Checker function or SubmissionChecker instance
+   * @param {Function} onSuccess - Success callback
+   */
+  setupSubmissionMonitoring(checker, onSuccess) {
+    const loader = LoaderFactory.create(this.platformName, {
+      interval: 2000, // Default interval
+    });
+    loader.start(checker, onSuccess);
+    this.loaderService = loader;
+  }
+
+  /**
+   * Generic upload handler creation and execution
+   * @param {Function} parseDataFn - Data parsing function
+   * @param {Function} uploadFn - Upload function
+   * @param {Function} markFn - Mark uploaded function
+   * @param {Function} startUploadFn - Start upload function (optional)
+   * @returns {Promise<Object>} Parsed data
+   */
+  async createAndExecuteUploadHandler(parseDataFn, uploadFn, markFn, startUploadFn) {
+    if (startUploadFn) startUploadFn();
+
+    try {
+      const data = await parseDataFn();
+      if (data) {
+        log.debug(`${this.platformName}: Parsed data successfully`, data);
+        return data;
+      } else {
+        log.warn(`${this.platformName}: No data parsed`);
+        return null;
+      }
+    } catch (error) {
+      log.error(`${this.platformName}: Error in upload handler:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Begin upload process
+   * @param {Object} data - Problem data to upload
+   * @param {Function} uploadFn - Upload function
+   * @param {Function} markFn - Mark uploaded function
+   */
+  async beginUpload(data, uploadFn, markFn) {
+    try {
+      await uploadFn(data, markFn);
+      log.info(`${this.platformName}: Upload completed successfully`);
+    } catch (error) {
+      log.error(`${this.platformName}: Upload failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create platform-specific upload function
+   * Factory method that generates optimized upload functions for different platforms
+   * This eliminates code duplication across platform upload functions
+   * @param {string} platformName - Platform display name
+   * @param {Function} problemInfoMapper - Function to map problem data to platform-specific format
+   * @returns {Function} Upload function
+   */
+  static createUploadFunction(platformName, problemInfoMapper) {
+    return async function uploadOneSolveProblemOnGit(problemData, callback) {
+      try {
+        const enhancedData = {
+          ...problemData,
+          platform: platformName,
+          problemInfo: problemInfoMapper ? problemInfoMapper(problemData) : problemData.problemInfo,
+        };
+        return await UploadService.uploadProblem(enhancedData, callback);
+      } catch (error) {
+        log.error(`Error in ${platformName} upload function:`, error);
+        throw error;
+      }
+    };
   }
 
   /**

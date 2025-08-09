@@ -24,7 +24,7 @@ const ToggleSwitch = ({ checked = true, onChange, id = "enable_popup" }) => (
         checked={checked}
         onChange={onChange}
       />
-      <label for={id} className="toggle-switch-label">
+      <label htmlFor={id} className="toggle-switch-label">
         <span className="toggle-switch-inner"></span>
         <span className="toggle-switch-switch"></span>
       </label>

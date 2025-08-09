@@ -24,15 +24,15 @@ export function startUpload() {
  * @param {object} branches - 브랜치 정보
  * @param {string} directory - 디렉토리 정보
  */
-export function markUploadedCSS(branches, directory) {
-  commonMarkUploaded(branches, directory);
+export function markUploadedCSS(branches, directory, uploadState) {
+  commonMarkUploaded(branches, directory, uploadState);
 }
 
 /**
  * 업로드 실패 알림 (공통 함수 사용)
  */
-export function markUploadFailedCSS() {
-  commonMarkFailed();
+export function markUploadFailedCSS(uploadState) {
+  commonMarkFailed(uploadState);
 }
 
 /**

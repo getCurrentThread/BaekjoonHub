@@ -1,9 +1,9 @@
-import PlatformHubBase, { Toast, checkEnable } from "@/commons/platformhub-base.js";
-import { SubmissionChecker } from "@/commons/loader-service.js";
+import PlatformHubBase, { Toast, checkEnable } from "@scripts/commons/platformhub-base.js";
+import { SubmissionChecker } from "@scripts/commons/loader-service.js";
 
-import { parseData } from "@/programmers/parsing.js";
-import uploadOneSolveProblemOnGit from "@/programmers/uploadfunctions.js";
-import { startUpload, markUploadedCSS } from "@/programmers/util.js";
+import { parseData } from "@scripts/programmers/parsing.js";
+import uploadOneSolveProblemOnGit from "@scripts/programmers/uploadfunctions.js";
+import { startUpload, markUploadedCSS } from "@scripts/programmers/util.js";
 
 class ProgrammersHub extends PlatformHubBase {
   constructor() {

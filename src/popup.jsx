@@ -1,115 +1,50 @@
 /**
- * BaekjoonHub Popup - React version
- * Chrome extension popup with React components and hooks
+ * BaekjoonHub Popup - Migrated to React 19 Centralized Storage
+ * Example of how to use the new storage system
  */
 
-import React, { useState, useEffect, useActionState, useOptimistic, startTransition } from 'react';
+import React, { useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import beginOAuth2 from "@/commons/oauth2.js";
-import log from "@/commons/logger.js";
-import { STORAGE_KEYS } from "@/constants/registry.js";
-import { getObjectFromLocalStorage, saveObjectInLocalStorage } from "@/commons/storage.js";
-import { PopupApp } from "@components/PopupApp.jsx";
+import { StorageProvider } from '@/storage/StorageContext.jsx';
+import { useAuthentication, useRepository, useSettings } from '@/storage/hooks.js';
+import { PopupApp } from '@components/PopupApp.jsx';
+import beginOAuth2 from "@scripts/commons/oauth2.js";
+import log from "@scripts/commons/logger.js";
 
 /**
- * Main Popup Component with React Hooks
+ * Popup component using centralized storage hooks
  */
 const PopupMain = () => {
-  const [authMode, setAuthMode] = useState('auth');
-  const [repoName, setRepoName] = useState('');
-  const [isEnabled, setIsEnabled] = useState(true);
-  const [isAuthActionAllowed, setIsAuthActionAllowed] = useState(false);
-
-  /**
-   * Handle authentication flow and determine UI state
-   */
-  const handleAuthentication = async () => {
-    log.info("handleAuthentication: Starting GitHub authentication flow.");
-    const token = await getObjectFromLocalStorage(STORAGE_KEYS.TOKEN);
-    log.info(`handleAuthentication: Token status - ${token ? "exists" : "null"}`);
-
-    if (token === null || token === undefined) {
-      log.info("handleAuthentication: Token is null or undefined, showing authorization mode.");
-      setAuthMode('auth');
-      setIsAuthActionAllowed(true);
-      return;
-    }
-
-    log.info("handleAuthentication: Token exists, attempting to verify with GitHub API.");
-    const AUTHENTICATION_URL = "https://api.github.com/user";
-    
-    try {
-      const response = await fetch(AUTHENTICATION_URL, {
-        method: "GET",
-        headers: {
-          Authorization: `token ${token}`,
-        },
-      });
-
-      log.info(`handleAuthentication: GitHub API response status: ${response.status}`);
-      
-      if (response.ok) {
-        log.info("handleAuthentication: Token verified successfully.");
-        const data = await getObjectFromLocalStorage([STORAGE_KEYS.MODE_TYPE, STORAGE_KEYS.HOOK, STORAGE_KEYS.ENABLE]);
-        const modeType = data[STORAGE_KEYS.MODE_TYPE];
-        const baekjoonHubHook = data[STORAGE_KEYS.HOOK];
-        const enableStatus = data[STORAGE_KEYS.ENABLE];
-        
-        log.info(`handleAuthentication: Retrieved modeType=${modeType}, baekjoonHubHook=${baekjoonHubHook}`);
-
-        if (modeType === "commit") {
-          log.info("handleAuthentication: Mode is 'commit', showing commit mode UI.");
-          
-          // Set enable status with default fallback
-          const enabledStatus = enableStatus !== undefined ? enableStatus : true;
-          if (enableStatus === undefined) {
-            await saveObjectInLocalStorage({ [STORAGE_KEYS.ENABLE]: true });
-          }
-          
-          setAuthMode('commit');
-          setRepoName(baekjoonHubHook || '');
-          setIsEnabled(enabledStatus);
-        } else {
-          log.info("handleAuthentication: Mode is not 'commit', showing hook mode UI.");
-          setAuthMode('hook');
-        }
-      } else if (response.status === 401) {
-        log.info("handleAuthentication: Bad OAuth token (401), resetting and re-authenticating.");
-        // Bad OAuth token, reset and re-authenticate
-        await saveObjectInLocalStorage({ [STORAGE_KEYS.TOKEN]: null });
-        log.info("BAD oAuth!!! Redirecting back to oAuth process");
-        
-        setAuthMode('auth');
-        setIsAuthActionAllowed(true);
-      } else {
-        log.error("handleAuthentication: Authentication failed with status:", response.status);
-      }
-    } catch (error) {
-      log.error("handleAuthentication: Error during authentication:", error);
-    }
+  // Use centralized storage hooks instead of local state
+  const { isAuthenticated, username, token, authenticate, logout, isPending: isAuthPending } = useAuthentication();
+  const { hook, modeType, setRepository, isPending: isRepoPending } = useRepository();
+  const { isEnabled, toggleEnable, isPending: isSettingsPending } = useSettings();
+  
+  // Derive auth mode from state
+  const getAuthMode = () => {
+    if (!isAuthenticated) return 'auth';
+    if (modeType === 'commit' && hook) return 'commit';
+    return 'hook';
   };
-
+  
   /**
    * Handle authentication button click
    */
   const handleAuthenticate = () => {
-    log.info(`handleAuthenticate: Authenticate button clicked. isAuthActionAllowed: ${isAuthActionAllowed}`);
-    if (isAuthActionAllowed) {
-      beginOAuth2();
-    }
+    log.info('Starting OAuth2 flow');
+    beginOAuth2();
   };
-
+  
   /**
    * Handle enable toggle change
+   * Now uses centralized storage action
    */
   const handleToggleChange = async (event) => {
     const isChecked = event.target.checked;
-    log.info(`handleToggleChange: Enable popup switch changed to ${isChecked}`);
-    
-    await saveObjectInLocalStorage({ [STORAGE_KEYS.ENABLE]: isChecked });
-    setIsEnabled(isChecked);
+    log.info(`Toggle changed to ${isChecked}`);
+    await toggleEnable(isChecked);
   };
-
+  
   /**
    * Get settings and hook URLs
    */
@@ -120,51 +55,42 @@ const PopupMain = () => {
       hookUrl: `chrome-extension://${extensionId}/settings.html`
     };
   };
-
-  // Effect for initial authentication check
-  useEffect(() => {
-    handleAuthentication();
-  }, []);
-
-  // Effect for Chrome storage changes
-  useEffect(() => {
-    const handleStorageChange = (changes, namespace) => {
-      log.info("chrome.storage.onChanged: Storage change detected.", changes);
-      if (namespace === "local" && (changes[STORAGE_KEYS.TOKEN] || changes[STORAGE_KEYS.MODE_TYPE])) {
-        log.info("chrome.storage.onChanged: Relevant storage key changed, re-running authentication handler.");
-        handleAuthentication();
-      }
-    };
-
-    chrome.storage.onChanged.addListener(handleStorageChange);
-
-    // Cleanup listener
-    return () => {
-      chrome.storage.onChanged.removeListener(handleStorageChange);
-    };
-  }, []);
-
+  
   const urls = getUrls();
-
+  const authMode = getAuthMode();
+  const isLoading = isAuthPending || isRepoPending || isSettingsPending;
+  
   return (
     <PopupApp
       onAuthenticate={handleAuthenticate}
       authMode={authMode}
-      repoName={repoName}
+      repoName={hook || ''}
       isEnabled={isEnabled}
       onToggleChange={handleToggleChange}
       settingsUrl={urls.settingsUrl}
       hookUrl={urls.hookUrl}
+      isLoading={isLoading}
     />
+  );
+};
+
+/**
+ * Root component with StorageProvider
+ */
+const App = () => {
+  return (
+    <StorageProvider>
+      <PopupMain />
+    </StorageProvider>
   );
 };
 
 // Initialize React app when DOM is ready
 document.addEventListener("DOMContentLoaded", () => {
-  log.info("DOMContentLoaded: Initializing React popup page.");
+  log.info("Initializing React popup with centralized storage");
   
   const container = document.body;
   const root = createRoot(container);
   
-  root.render(<PopupMain />);
+  root.render(<App />);
 });

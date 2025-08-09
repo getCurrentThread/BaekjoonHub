@@ -1,9 +1,8 @@
-import { startUpload as commonStartUpload, markUploadedCSS as commonMarkUploaded, markUploadFailedCSS as commonMarkFailed } from "@/commons/ui-util.js";
-import { parseNumberFromString, maxValuesGroupBykey, isNull, filter, isEmpty } from "@/commons/util.js";
-import { uploadState, RESULT_CATEGORY } from "@/baekjoon/variables.js";
-import { parsingResultTableList } from "@/baekjoon/parsing.js";
-import { Toast } from "@/commons/toast.js";
-import log from "@/commons/logger.js";
+import { startUpload as commonStartUpload, markUploadedCSS as commonMarkUploaded, markUploadFailedCSS as commonMarkFailed } from "@scripts/commons/ui-util.js";
+import { parseNumberFromString, maxValuesGroupBykey } from "@scripts/commons/util.js";
+import { parsingResultTableList } from "@scripts/baekjoon/parsing.js";
+import { Toast } from "@scripts/commons/platformhub-base.js";
+import log from "@scripts/commons/logger.js";
 
 /**
  * 제출 모니터링 시작 알림
@@ -26,14 +25,14 @@ export function startUpload() {
  * @param {string} directory - 디렉토리 정보
  */
 export function markUploadedCSS(branches, directory) {
-  commonMarkUploaded(branches, directory, uploadState);
+  commonMarkUploaded(branches, directory);
 }
 
 /**
  * 업로드 실패 알림 (공통 함수 사용)
  */
 export function markUploadFailedCSS() {
-  commonMarkFailed(uploadState);
+  commonMarkFailed();
 }
 
 /**
@@ -121,7 +120,7 @@ export function findFromResultTable() {
  * */
 export function compareSubmission(a, b) {
   // prettier-ignore-start
-  /* eslint-disable */
+
   return hasNotSubtask(a.result, b.result)
     ? a.runtime === b.runtime
       ? a.memory === b.memory
@@ -131,7 +130,7 @@ export function compareSubmission(a, b) {
         : a.memory - b.memory
       : a.runtime - b.runtime
     : compareResult(a.result, b.result);
-  /* eslint-enable */
+
   // prettier-ignore-end
 }
 

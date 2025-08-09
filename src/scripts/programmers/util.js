@@ -1,6 +1,6 @@
-import { isNull } from "@/commons/util.js";
-import { uploadState } from "@/programmers/variables.js";
-import { startUpload as commonStartUpload, markUploadedCSS as commonMarkUploaded, markUploadFailedCSS as commonMarkFailed } from "@/commons/ui-util.js";
+import { isNull } from "@scripts/commons/util.js";
+import { uploadState } from "@scripts/programmers/variables.js";
+import { startUpload as commonStartUpload, markUploadedCSS as commonMarkUploaded, markUploadFailedCSS as commonMarkFailed } from "@scripts/commons/ui-util.js";
 
 /**
  * 프로그래머스 전용 유틸리티 함수들

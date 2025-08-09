@@ -4,7 +4,7 @@
     uploadState: 현재 업로드 중인지를 저장하는 boolean입니다.
 */
 
-import constants from "@/constants/code.js";
+import constants from "@scripts/constants/code.js";
 
 export const languages = constants.languages;
 export const bjLevel = constants.bjLevel;

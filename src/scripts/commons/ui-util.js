@@ -1,10 +1,9 @@
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-import { Toast } from "@/commons/toast.js";
-import log from "@/commons/logger.js";
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { Toast } from "@scripts/commons/platformhub-base.js";
+import log from "@scripts/commons/logger.js";
 import { ToastSuccessMessage } from "@components/ToastSuccess.jsx";
 import { ToastFailureMessage } from "@components/ToastFailure.jsx";
-import { ToastInfoMessage } from "@components/ToastInfo.jsx";
 
 /**
  * 업로드 시작 알림 (공통)
@@ -18,7 +17,7 @@ export function startUpload() {
 /**
  * 업로드 실패 알림 (공통)
  * 모든 플랫폼에서 사용할 수 있는 통합 실패 알림 함수
- * 
+ *
  * @param {Object} uploadState - 업로드 상태를 관리하는 객체 (선택적)
  */
 export function markUploadFailedCSS(uploadState) {
@@ -27,20 +26,20 @@ export function markUploadFailedCSS(uploadState) {
   }
 
   const toast = Toast.danger("", 5000);
-  
+
   // React 컴포넌트를 사용하여 Toast 내용 렌더링
   if (toast && toast.element) {
     const messageContainer = toast.element.querySelector(".message-container");
     if (messageContainer) {
-      messageContainer.innerHTML = '';
-      const reactContainer = document.createElement('div');
+      messageContainer.innerHTML = "";
+      const reactContainer = document.createElement("div");
       messageContainer.appendChild(reactContainer);
-      
+
       const root = createRoot(reactContainer);
       root.render(React.createElement(ToastFailureMessage));
     }
   }
-  
+
   log.debug("markUploadFailedCSS: Upload failure toast displayed");
 }
 
@@ -51,7 +50,7 @@ export function markUploadFailedCSS(uploadState) {
  * @param {Object} uploadState - 업로드 상태를 관리하는 객체
  * @param {number} timeout - 타임아웃 시간 (기본값: 10000ms)
  */
-export function startUploadCountDown(uploadState, timeout = 10000) {
+export function startUploadCountDown(uploadState) {
   // Toast를 사용하므로 별도의 타임아웃 처리가 필요 없음
   if (uploadState) {
     uploadState.uploading = true;
@@ -129,15 +128,15 @@ export function markUploadedCSS(branches, directory, uploadState) {
     const messageContainer = toast.element.querySelector(".message-container");
     if (messageContainer) {
       // 기존 내용을 지우고 React 컴포넌트로 교체
-      messageContainer.innerHTML = '';
-      const reactContainer = document.createElement('div');
+      messageContainer.innerHTML = "";
+      const reactContainer = document.createElement("div");
       messageContainer.appendChild(reactContainer);
-      
+
       const root = createRoot(reactContainer);
       root.render(
         React.createElement(ToastSuccessMessage, {
           problemInfo: problemInfo,
-          onGitHubClick: () => window.open(uploadedUrl, "_blank")
+          onGitHubClick: () => window.open(uploadedUrl, "_blank"),
         })
       );
     }

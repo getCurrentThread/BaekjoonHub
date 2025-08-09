@@ -1,9 +1,9 @@
-import PlatformHubBase, { Toast, checkEnable } from "@/commons/platformhub-base.js";
-import { SubmissionChecker } from "@/commons/loader-service.js";
+import PlatformHubBase, { Toast, checkEnable } from "@scripts/commons/platformhub-base.js";
+import { SubmissionChecker } from "@scripts/commons/loader-service.js";
 
-import { parseData } from "@/goormlevel/parsing.js";
-import uploadOneSolveProblemOnGit from "@/goormlevel/uploadfunctions.js";
-import { startUpload, markUploadedCSS } from "@/goormlevel/util.js";
+import { parseData } from "@scripts/goormlevel/parsing.js";
+import uploadOneSolveProblemOnGit from "@scripts/goormlevel/uploadfunctions.js";
+import { startUpload, markUploadedCSS } from "@scripts/goormlevel/util.js";
 class GoormLevelHub extends PlatformHubBase {
   constructor() {
     super({

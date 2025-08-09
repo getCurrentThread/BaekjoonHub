@@ -1,7 +1,7 @@
-import { languages, difficultyLabels } from "@/goormlevel/variables.js";
-import { convertSingleCharToDoubleChar } from "@/commons/util.js";
-import { getDirNameByTemplate } from "@/commons/storage.js";
-import { getDateString } from "@/commons/ui-util.js";
+import { languages, difficultyLabels } from "@scripts/goormlevel/variables.js";
+import { convertSingleCharToDoubleChar } from "@scripts/commons/util.js";
+import { getDirNameByTemplate } from "@/storage/storageAdapter.js";
+import { getDateString } from "@scripts/commons/ui-util.js";
 
 export async function makeData({
   // 문제 링크

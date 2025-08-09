@@ -1,5 +1,3 @@
-const debug = true;
-
 /**
  * 현재 익스텐션의 버전정보를 반환합니다。
  * @returns {string} - 현재 익스텐션의 버전정보
@@ -126,7 +124,7 @@ export function unescapeHtml(text) {
  */
 export function convertSingleCharToDoubleChar(text) {
   // prettier-ignore
-  /* eslint-disable */
+
   // singleChar to doubleChar mapping
   const map = {
     "!": "！",
@@ -160,7 +158,6 @@ export function convertSingleCharToDoubleChar(text) {
     "-": "－",
   };
   return text.replace(/[!%&()*+,./:;<=>?@[\]\\^`{|}~ -]/g, (m) => map[m]);
-  /* eslint-enable */
 }
 
 /**
@@ -201,7 +198,6 @@ export function parseNumberFromString(str) {
  */
 export function groupBy(array, key) {
   return array.reduce((rv, x) => {
-    // eslint-disable-next-line no-param-reassign
     rv[x[key]] = rv[x[key]] || [];
     rv[x[key]].push(x);
     return rv;
@@ -267,11 +263,9 @@ export async function asyncPool(poolLimit, array, iteratorFn) {
     ret.push(p);
 
     if (poolLimit <= array.length) {
-      // eslint-disable-next-line no-await-in-loop
       const e = p.then(() => executing.splice(executing.indexOf(e), 1));
       executing.push(e);
       if (executing.length >= poolLimit) {
-        // eslint-disable-next-line no-await-in-loop
         await Promise.race(executing);
       }
     }

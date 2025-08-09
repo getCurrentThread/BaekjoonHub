@@ -1,11 +1,11 @@
-import PlatformHubBase, { log, checkEnable } from "@/commons/platformhub-base.js";
-import { SubmissionChecker } from "@/commons/loader-service.js";
-import { isEmpty, isNull } from "@/commons/util.js";
-import { RESULT_MESSAGE } from "@/baekjoon/variables.js";
-import { TIMEOUTS, RETRY_LIMITS, RESULT_MESSAGES, PLATFORMS } from "@/constants/config.js";
-import { findUsername, startUpload, markUploadedCSS, isExistResultTable, startMonitoringToast } from "@/baekjoon/util.js";
-import { findData, parseProblemDescription, parsingResultTableList } from "@/baekjoon/parsing.js";
-import uploadOneSolveProblemOnGit from "@/baekjoon/uploadfunctions.js";
+import PlatformHubBase, { log, checkEnable } from "@scripts/commons/platformhub-base.js";
+import { SubmissionChecker } from "@scripts/commons/loader-service.js";
+import { isEmpty, isNull } from "@scripts/commons/util.js";
+import { RESULT_MESSAGE } from "@scripts/baekjoon/variables.js";
+import { TIMEOUTS, RETRY_LIMITS, RESULT_MESSAGES, PLATFORMS } from "@scripts/constants/config.js";
+import { findUsername, startUpload, markUploadedCSS, isExistResultTable, startMonitoringToast } from "@scripts/baekjoon/util.js";
+import { findData, parseProblemDescription, parsingResultTableList } from "@scripts/baekjoon/parsing.js";
+import uploadOneSolveProblemOnGit from "@scripts/baekjoon/uploadfunctions.js";
 
 class BaekjoonHub extends PlatformHubBase {
   constructor() {

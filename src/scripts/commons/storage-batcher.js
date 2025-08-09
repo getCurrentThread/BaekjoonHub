@@ -2,9 +2,9 @@
  * Storage Batcher for optimizing Chrome storage operations
  * Reduces I/O operations by batching multiple updates
  */
-import { getStats, saveStats } from "@/commons/storage.js";
-import log from "@/commons/logger.js";
-import { TIMEOUTS } from "@/constants/config.js";
+import { getStats, saveStats } from "@/storage/storageAdapter.js";
+import log from "@scripts/commons/logger.js";
+import { TIMEOUTS } from "@scripts/constants/config.js";
 
 /**
  * Utility to update nested object from path

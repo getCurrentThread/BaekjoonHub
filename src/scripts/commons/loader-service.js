@@ -1,5 +1,5 @@
-import log from "@/commons/logger.js";
-import { checkEnable } from "@/commons/enable.js";
+import log from "@scripts/commons/logger.js";
+import { isExtensionEnabled } from "@scripts/commons/enable.js";
 
 /**
  * Common loader service for monitoring submission results
@@ -22,7 +22,7 @@ export class LoaderService {
   start(checkCondition, onSuccess) {
     this.loader = setInterval(async () => {
       try {
-        const enable = await checkEnable();
+        const enable = await isExtensionEnabled();
         if (!enable) {
           this.stop();
           return;

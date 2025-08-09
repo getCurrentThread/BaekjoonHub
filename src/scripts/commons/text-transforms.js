@@ -3,7 +3,7 @@
  * 기존 util.js의 함수들을 템플릿에 적합하게 재구성
  */
 
-import { b64DecodeUnicode, b64EncodeUnicode, escapeHtml, unescapeHtml, filter, combine, convertSingleCharToDoubleChar } from "./util.js";
+import { b64DecodeUnicode, b64EncodeUnicode, escapeHtml, unescapeHtml, convertSingleCharToDoubleChar } from "./util.js";
 
 /**
  * 문자열에서 지정한 부분 문자열을 다른 문자열로 교체합니다
@@ -57,7 +57,7 @@ export function removeAfterSpace(text) {
 export function urlSafe(text) {
   if (typeof text !== "string") return text;
   return text
-    .replace(/[\\s\\/\\\\:*?\"<>|]/g, "_") // 특수문자를 언더스코어로 변경
+    .replace(/[\s/\\:*?"<>|]/g, "_") // 특수문자를 언더스코어로 변경
     .replace(/_{2,}/g, "_") // 연속된 언더스코어를 하나로
     .replace(/^_|_$/g, ""); // 앞뒤 언더스코어 제거
 }

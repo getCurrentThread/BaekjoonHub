@@ -1,9 +1,9 @@
-import PlatformHubBase, { Toast, checkEnable, log } from "@/commons/platformhub-base.js";
-import { SubmissionChecker } from "@/commons/loader-service.js";
+import PlatformHubBase, { Toast, checkEnable, log } from "@scripts/commons/platformhub-base.js";
+import { SubmissionChecker } from "@scripts/commons/loader-service.js";
 
-import { parseCode, parseData } from "@/swexpertacademy/parsing.js";
-import uploadOneSolveProblemOnGit from "@/swexpertacademy/uploadfunctions.js";
-import { startUpload, markUploadedCSS, getNickname, makeSubmitButton } from "@/swexpertacademy/util.js";
+import { parseCode, parseData } from "@scripts/swexpertacademy/parsing.js";
+import uploadOneSolveProblemOnGit from "@scripts/swexpertacademy/uploadfunctions.js";
+import { startUpload, markUploadedCSS, getNickname, makeSubmitButton } from "@scripts/swexpertacademy/util.js";
 
 class SWExpertAcademyHub extends PlatformHubBase {
   constructor() {

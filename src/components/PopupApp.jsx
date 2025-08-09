@@ -18,6 +18,7 @@ import { CommitSection } from './CommitSection.jsx';
  * @param {function} props.onToggleChange - Enable toggle handler
  * @param {string} props.settingsUrl - Settings page URL
  * @param {string} props.hookUrl - Hook setup URL
+ * @param {boolean} props.isLoading - Loading state
  * @returns {JSX.Element} Complete popup application
  */
 export const PopupApp = ({ 
@@ -27,7 +28,8 @@ export const PopupApp = ({
   isEnabled = true,
   onToggleChange,
   settingsUrl,
-  hookUrl
+  hookUrl,
+  isLoading = false
 }) => (
   <div className="grid container">
     <PopupHeader />

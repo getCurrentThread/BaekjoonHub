@@ -1,7 +1,7 @@
 /** NOTE: goormlevel에서 사용할 util 모음입니다. */
 
-import { uploadState } from "@/goormlevel/variables.js";
-import { startUpload as commonStartUpload, markUploadedCSS as commonMarkUploaded, markUploadFailedCSS as commonMarkFailed } from "@/commons/ui-util.js";
+import { uploadState } from "@scripts/goormlevel/variables.js";
+import { startUpload as commonStartUpload, markUploadedCSS as commonMarkUploaded, markUploadFailedCSS as commonMarkFailed } from "@scripts/commons/ui-util.js";
 
 /**
  * 구름레벨 전용 유틸리티 함수들

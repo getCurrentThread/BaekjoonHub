@@ -1,7 +1,6 @@
-import { convertSingleCharToDoubleChar } from "@/commons/util.js";
-import { getDateString } from "@/commons/ui-util.js";
-import { getDirNameByTemplate } from "@/commons/storage.js";
-import urls from "@/constants/url.js";
+import { convertSingleCharToDoubleChar } from "@scripts/commons/util.js";
+import { getDateString } from "@scripts/commons/ui-util.js";
+import { getDirNameByTemplate } from "@/storage/storageAdapter.js";
 
 /*
   문제가 맞았다면 문제 관련 데이터를 파싱하는 함수의 모음입니다.

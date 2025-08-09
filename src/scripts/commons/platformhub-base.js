@@ -1,261 +1,359 @@
-import { isNull, isEmpty, calculateBlobSHA, getVersion } from "@/commons/util.js";
-import { getStats, getHook, saveStats, updateLocalStorageStats, getStatsSHAfromPath } from "@/commons/storage.js";
-import { Toast } from "@/commons/toast.js";
-import { checkEnable } from "@/commons/enable.js";
-import { LoaderFactory } from "@/commons/loader-service.js";
-import UploadService, { UploadHandlerFactory } from "@/commons/uploadservice.js";
-import log from "@/commons/logger.js";
-import { TIMEOUTS, RETRY_LIMITS } from "@/constants/config.js";
+/**
+ * PlatformHub Base - Migrated to Centralized Storage
+ * Base class for platform-specific implementations with centralized state management
+ */
 
-// Re-export commonly used utilities for subclasses
-export { Toast, checkEnable, log };
+import { getToken, getHook, getStats, saveStats, updateStatsSHAfromPath, getStatsSHAfromPath, initializeStorageAdapter, addStorageListener } from "@/storage/storageAdapter.js";
+import { isExtensionEnabled } from "./enable.js";
+import UploadService from "./uploadservice.js";
+import log from "@scripts/commons/logger.js";
 
 /**
- * Base class for all platform hub implementations
- * Provides common functionality for submission monitoring and upload handling
+ * Base class for all platform implementations
+ * Provides common functionality with centralized storage management
  */
-export default class PlatformHubBase {
-  constructor(config = {}) {
-    this.loader = null;
-    this.currentUrl = window.location.href;
-    this.currentPathname = window.location.pathname;
-    this.config = {
-      loaderInterval: TIMEOUTS.LOADER_INTERVAL,
-      platformName: "unknown",
-      ...config,
-    };
+// Toast utility for notifications
+export const Toast = {
+  info: (message) => log.info(`🔔 ${message}`),
+  success: (message) => log.info(`✅ ${message}`),
+  warning: (message) => log.warn(`⚠️ ${message}`),
+  error: (message) => log.error(`❌ ${message}`),
+};
 
-    this.init().catch((error) => log.error(`Error initializing ${this.config.platformName}:`, error));
+// Export log and Toast for compatibility
+export { log };
+
+export default class PlatformHubBase {
+  constructor(platformName) {
+    this.platformName = platformName;
+    this.isInitialized = false;
+    this.storageState = null;
+    this.unsubscribeStorage = null;
   }
 
   /**
-   * Initialize the platform hub
-   * This method should be overridden by subclasses
+   * Initialize platform with centralized storage
    */
-  async init() {
-    log.info(`Initializing ${this.config.platformName} hub`);
+  async initialize() {
+    if (this.isInitialized) {
+      return;
+    }
 
-    // Check if extension is enabled globally
-    const enabled = await checkEnable();
-    if (!enabled) {
-      log.info(`${this.config.platformName} hub is disabled, skipping initialization`);
+    try {
+      // Initialize storage adapter
+      await initializeStorageAdapter();
+
+      // Set up storage listener
+      this.unsubscribeStorage = addStorageListener((state, changes) => {
+        this.storageState = state;
+        this.onStorageChange(changes);
+      });
+
+      // Get initial storage state
+      const { getStorageState } = await import("@/storage/storageAdapter.js");
+      this.storageState = getStorageState();
+
+      this.isInitialized = true;
+      log.info(`PlatformHubBase[${this.platformName}]: Initialized successfully`);
+    } catch (error) {
+      log.error(`PlatformHubBase[${this.platformName}]: Initialization failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle storage state changes
+   * Override in subclasses for platform-specific behavior
+   */
+  onStorageChange(changes) {
+    log.debug(`PlatformHubBase[${this.platformName}]: Storage changed`, Object.keys(changes));
+  }
+
+  /**
+   * Check if platform should be active based on storage state
+   */
+  async shouldBeActive() {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    // Check if extension is enabled
+    const isEnabled = await isExtensionEnabled();
+    if (!isEnabled) {
       return false;
     }
 
-    return true;
+    // Check if authentication is complete
+    const hasToken = !!this.storageState?.token;
+    const hasHook = !!this.storageState?.hook;
+
+    return hasToken && hasHook;
   }
 
   /**
-   * Start the submission monitoring loader
-   * @param {Function} checkCondition - Function that returns true when submission should be processed
-   * @param {Function} onSuccess - Function to call when successful submission is detected
+   * Get authentication data from centralized storage
    */
-  startLoader(checkCondition, onSuccess) {
-    this.loader = setInterval(async () => {
-      try {
-        const enable = await checkEnable();
-        if (!enable) {
-          this.stopLoader();
-          return;
-        }
-
-        if (await checkCondition()) {
-          log.info(`정답이 나왔습니다. ${this.config.platformName} 업로드를 시작합니다.`);
-          this.stopLoader();
-          await onSuccess();
-        }
-      } catch (error) {
-        log.error(`Error in ${this.config.platformName} loader:`, error);
-        this.stopLoader();
-      }
-    }, this.config.loaderInterval);
-  }
-
-  /**
-   * Generic submission monitoring setup using LoaderService
-   * @param {Function|Object} checker - Checker function or SubmissionChecker instance
-   * @param {Function} onSuccess - Success callback
-   */
-  setupSubmissionMonitoring(checker, onSuccess) {
-    const loader = LoaderFactory.create(this.config.platformName, {
-      interval: this.config.loaderInterval,
-    });
-    loader.start(checker, onSuccess);
-    this.loaderService = loader;
-  }
-
-  /**
-   * Generic upload handler creation and execution
-   * @param {Function} parseDataFn - Data parsing function
-   * @param {Function} uploadFn - Upload function
-   * @param {Function} markFn - Mark uploaded function
-   * @param {Function} startUploadFn - Start upload function
-   * @returns {Promise<Object>} Parsed data
-   */
-  async createAndExecuteUploadHandler(parseDataFn, uploadFn, markFn, startUploadFn) {
-    if (startUploadFn) startUploadFn();
-
-    const uploadHandler = UploadHandlerFactory.create(this.config.platformName, parseDataFn, uploadFn, markFn, startUploadFn);
-
-    return await uploadHandler();
-  }
-
-  /**
-   * Stop the submission monitoring loader
-   */
-  stopLoader() {
-    if (this.loader) {
-      clearInterval(this.loader);
-      this.loader = null;
+  async getAuthData() {
+    if (!this.isInitialized) {
+      await this.initialize();
     }
-    if (this.loaderService) {
-      this.loaderService.stop();
-      this.loaderService = null;
-    }
-  }
 
-  /**
-   * Common upload logic for all platforms
-   * @param {Object} data - Parsed problem data
-   * @param {Function} uploadFunction - Platform-specific upload function
-   * @param {Function} markFunction - Platform-specific mark function
-   */
-  async beginUpload(data, uploadFunction, markFunction) {
-    try {
-      log.debug(`${this.config.platformName} data:`, data);
+    const token = await getToken();
+    const hook = await getHook();
 
-      if (isEmpty(data)) {
-        log.debug(`No data to upload for ${this.config.platformName}`);
-        return;
-      }
-
-      const [stats, hook] = await Promise.all([getStats(), getHook()]);
-      const currentVersion = stats.version;
-
-      const shouldUpdateVersion = isNull(currentVersion) || currentVersion !== getVersion() || isNull(await getStatsSHAfromPath(hook));
-
-      if (shouldUpdateVersion) {
-        await this.versionUpdate();
-      }
-
-      const filePath = `${hook}/${data.directory}/${data.fileName}`;
-      const [cachedSHA, calcSHA] = await Promise.all([getStatsSHAfromPath(filePath), Promise.resolve(calculateBlobSHA(data.code))]);
-
-      log.debug("cachedSHA", cachedSHA, "calcSHA", calcSHA);
-
-      if (cachedSHA === calcSHA) {
-        markFunction(stats.branches, data.directory);
-        log.info(`현재 제출번호를 업로드한 기록이 있습니다. (${this.config.platformName})`);
-        return;
-      }
-
-      await uploadFunction(data, markFunction);
-    } catch (error) {
-      log.error(`Error in ${this.config.platformName} upload:`, error);
-      Toast.raiseToast(`${this.config.platformName} 업로드 중 오류가 발생했습니다.`);
-    }
-  }
-
-  /**
-   * Update version information
-   */
-  async versionUpdate() {
-    try {
-      log.info(`start versionUpdate for ${this.config.platformName}`);
-      const stats = await updateLocalStorageStats();
-      stats.version = getVersion();
-      await saveStats(stats);
-      log.debug("stats updated.", stats);
-    } catch (error) {
-      log.error(`Error updating version for ${this.config.platformName}:`, error);
-    }
-  }
-
-  /**
-   * Check if current URL matches any of the provided patterns
-   * @param {Array<string|RegExp>} patterns - URL patterns to match
-   * @returns {boolean}
-   */
-  matchesUrl(patterns) {
-    return patterns.some((pattern) => {
-      if (pattern instanceof RegExp) {
-        return pattern.test(this.currentUrl) || pattern.test(this.currentPathname);
-      }
-      return this.currentUrl.includes(pattern);
-    });
-  }
-
-  /**
-   * Safely query DOM element with optional chaining
-   * @param {string} selector - CSS selector
-   * @returns {Element|null}
-   */
-  querySelector(selector) {
-    return document.querySelector(selector);
-  }
-
-  /**
-   * Safely query multiple DOM elements
-   * @param {string} selector - CSS selector
-   * @returns {Array<Element>}
-   */
-  querySelectorAll(selector) {
-    return Array.from(document.querySelectorAll(selector));
-  }
-
-  /**
-   * Get text content from element with safe fallback
-   * @param {string} selector - CSS selector
-   * @returns {string}
-   */
-  getTextContent(selector) {
-    const element = this.querySelector(selector);
-    return element?.textContent?.trim() || "";
-  }
-
-  /**
-   * Create a generic upload function for platform-specific implementations
-   * This eliminates code duplication across platform upload functions
-   * @param {string} platformName - Platform display name
-   * @param {Function} problemInfoMapper - Function to map problem data to platform-specific format
-   * @returns {Function} Upload function
-   */
-  static createUploadFunction(platformName, problemInfoMapper) {
-    return async function uploadOneSolveProblemOnGit(problemData, callback) {
-      try {
-        const enhancedData = {
-          ...problemData,
-          platform: platformName,
-          problemInfo: problemInfoMapper ? problemInfoMapper(problemData) : problemData.problemInfo,
-        };
-        return await UploadService.uploadProblem(enhancedData, callback);
-      } catch (error) {
-        log.error(`Error in ${platformName} upload function:`, error);
-        throw error;
-      }
+    return {
+      token,
+      hook,
+      username: this.storageState?.username,
+      isAuthenticated: !!(token && hook),
     };
   }
 
   /**
-   * Retry operation with exponential backoff
-   * @param {Function} operation - Async operation to retry
-   * @param {number} maxRetries - Maximum number of retries
-   * @param {string} operationName - Name for logging
-   * @returns {Promise<any>} Operation result
+   * Get platform statistics
    */
-  async retryWithBackoff(operation, maxRetries = RETRY_LIMITS.API_MAX_RETRIES, operationName = "operation") {
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        return await operation();
-      } catch (error) {
-        if (i === maxRetries - 1) {
-          log.error(`${operationName} failed after ${maxRetries} retries:`, error);
-          throw error;
-        }
-        const delay = Math.min(TIMEOUTS.API_RETRY_BASE * Math.pow(2, i), TIMEOUTS.MAX_RETRY_WAIT);
-        log.debug(`${operationName} failed, retrying in ${delay}ms (attempt ${i + 1}/${maxRetries})`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
+  async getPlatformStats() {
+    if (!this.isInitialized) {
+      await this.initialize();
     }
+
+    const stats = await getStats();
+    const platformStats = stats.problems?.[this.platformName] || {};
+
+    return {
+      totalSolved: Object.keys(platformStats).length,
+      lastSolved: this.getLastSolvedTime(platformStats),
+      submissions: stats.submission || {},
+      branches: stats.branches || {},
+    };
+  }
+
+  /**
+   * Update problem statistics
+   */
+  async updateProblemStats(problemId, problemData) {
+    try {
+      const stats = await getStats();
+
+      if (!stats.problems) {
+        stats.problems = {};
+      }
+
+      if (!stats.problems[this.platformName]) {
+        stats.problems[this.platformName] = {};
+      }
+
+      stats.problems[this.platformName][problemId] = {
+        ...problemData,
+        solvedAt: Date.now(),
+        platform: this.platformName,
+      };
+
+      await saveStats(stats);
+
+      log.info(`PlatformHubBase[${this.platformName}]: Problem stats updated`, {
+        problemId,
+        title: problemData.title,
+      });
+    } catch (error) {
+      log.error(`PlatformHubBase[${this.platformName}]: Failed to update problem stats:`, error);
+    }
+  }
+
+  /**
+   * Check if problem was already uploaded
+   */
+  async isProblemUploaded(filePath) {
+    try {
+      const sha = await getStatsSHAfromPath(filePath);
+      return !!sha;
+    } catch (error) {
+      log.error(`PlatformHubBase[${this.platformName}]: Error checking upload status:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Mark problem as uploaded
+   */
+  async markProblemAsUploaded(filePath, sha) {
+    try {
+      await updateStatsSHAfromPath(filePath, sha);
+      log.debug(`PlatformHubBase[${this.platformName}]: Problem marked as uploaded`, {
+        filePath,
+        sha: sha.substring(0, 8) + "...",
+      });
+    } catch (error) {
+      log.error(`PlatformHubBase[${this.platformName}]: Failed to mark as uploaded:`, error);
+    }
+  }
+
+  /**
+   * Upload problem using centralized upload service
+   */
+  async uploadProblem(problemData, callback) {
+    try {
+      if (!this.isInitialized) {
+        await this.initialize();
+      }
+
+      // Check if platform should be active
+      if (!(await this.shouldBeActive())) {
+        log.warn(`PlatformHubBase[${this.platformName}]: Platform not active, skipping upload`);
+        return;
+      }
+
+      // Add platform information to problem data
+      const enrichedProblemData = {
+        ...problemData,
+        platform: this.platformName,
+        timestamp: Date.now(),
+      };
+
+      // Use centralized upload service
+      await UploadService.uploadProblem(enrichedProblemData, callback);
+
+      // Update problem statistics
+      if (problemData.problemInfo) {
+        await this.updateProblemStats(problemData.problemInfo.problemId || problemData.problemInfo.id, problemData.problemInfo);
+      }
+
+      log.info(`PlatformHubBase[${this.platformName}]: Problem uploaded successfully`, {
+        directory: problemData.directory,
+        fileName: problemData.fileName,
+      });
+    } catch (error) {
+      log.error(`PlatformHubBase[${this.platformName}]: Upload failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get file directory template
+   */
+  async getDirectoryTemplate(problemData, language) {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    const useCustomTemplate = this.storageState?.useCustomTemplate || false;
+    const dirTemplate = this.storageState?.dirTemplate;
+
+    if (useCustomTemplate && dirTemplate) {
+      return this.processTemplate(dirTemplate, problemData, language);
+    }
+
+    // Default template: language/platform/problemId.title
+    const { problemId, title } = problemData;
+    const safeTitle = this.sanitizeFileName(title || "Problem");
+
+    return `${language}/${this.platformName}/${problemId}. ${safeTitle}`;
+  }
+
+  /**
+   * Process template string with problem data
+   */
+  processTemplate(template, problemData, language) {
+    let processed = template;
+
+    // Replace template variables
+    const variables = {
+      language: language,
+      platform: this.platformName,
+      problemId: problemData.problemId || problemData.id,
+      title: this.sanitizeFileName(problemData.title || "Problem"),
+      level: problemData.level || "",
+      difficulty: problemData.difficulty || "",
+      category: problemData.category || "",
+    };
+
+    Object.entries(variables).forEach(([key, value]) => {
+      const regex = new RegExp(`{{${key}}}`, "g");
+      processed = processed.replace(regex, value);
+    });
+
+    return processed;
+  }
+
+  /**
+   * Sanitize file name for safe file system usage
+   */
+  sanitizeFileName(name) {
+    return name
+      .replace(/[<>:"/\\|?*]/g, "") // Remove invalid characters
+      .replace(/\s+/g, " ") // Normalize whitespace
+      .trim();
+  }
+
+  /**
+   * Get last solved time from platform stats
+   */
+  getLastSolvedTime(platformStats) {
+    let lastTime = 0;
+
+    Object.values(platformStats).forEach((problem) => {
+      if (problem.solvedAt && problem.solvedAt > lastTime) {
+        lastTime = problem.solvedAt;
+      }
+    });
+
+    return lastTime || null;
+  }
+
+  /**
+   * Show notification to user
+   */
+  showNotification(message, type = "info") {
+    // Create notification element
+    const notification = document.createElement("div");
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 10000;
+      padding: 12px 16px;
+      border-radius: 4px;
+      color: white;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      max-width: 300px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    `;
+
+    // Set background color based on type
+    const colors = {
+      info: "#007bff",
+      success: "#28a745",
+      warning: "#ffc107",
+      error: "#dc3545",
+    };
+
+    notification.style.backgroundColor = colors[type] || colors.info;
+    notification.textContent = `[${this.platformName}] ${message}`;
+
+    // Add to page
+    document.body.appendChild(notification);
+
+    // Remove after 5 seconds
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 5000);
+  }
+
+  /**
+   * Clean up resources
+   */
+  destroy() {
+    if (this.unsubscribeStorage) {
+      this.unsubscribeStorage();
+      this.unsubscribeStorage = null;
+    }
+
+    this.isInitialized = false;
+    this.storageState = null;
+
+    log.info(`PlatformHubBase[${this.platformName}]: Destroyed`);
   }
 }

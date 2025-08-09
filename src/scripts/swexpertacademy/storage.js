@@ -1,7 +1,7 @@
-import { getObjectFromLocalStorage, saveObjectInLocalStorage } from "@/commons/storage.js";
-import { isNull } from "@/commons/util.js";
-import { STORAGE_KEYS } from "@/constants/registry.js";
-import log from "@/commons/logger.js";
+import { getObjectFromLocalStorage, saveObjectInLocalStorage } from "@/storage/storageAdapter.js";
+import { isNull } from "@scripts/commons/util.js";
+import { STORAGE_KEYS } from "@scripts/constants/registry.js";
+import log from "@scripts/commons/logger.js";
 
 (async () => {
   const data = await getObjectFromLocalStorage(STORAGE_KEYS.SWEA);

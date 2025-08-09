@@ -6,7 +6,7 @@
     difficultyLabels: 문제의 난이도를 숫자로 매핑하는 상수입니다.
 */
 
-import constants from "@/constants/code.js";
+import constants from "@scripts/constants/code.js";
 
 export const languages = constants.languages.goormlevel;
 export const difficultyLabels = constants.goormlevelDifficultyLabels;

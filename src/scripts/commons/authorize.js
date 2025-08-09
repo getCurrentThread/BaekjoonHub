@@ -1,6 +1,6 @@
-import urls from "@/constants/url.js";
-import { STORAGE_KEYS } from "@/constants/registry.js";
-import log from "@/commons/logger.js";
+import urls from "@scripts/constants/url.js";
+import { STORAGE_KEYS } from "@scripts/constants/registry.js";
+import log from "@scripts/commons/logger.js";
 
 /*
     (needs patch)

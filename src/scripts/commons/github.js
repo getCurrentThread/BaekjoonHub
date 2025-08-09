@@ -1,6 +1,6 @@
 import { b64EncodeUnicode } from "./util.js";
-import urls from "@/constants/url.js";
-import log from "@/commons/logger.js";
+import urls from "@scripts/constants/url.js";
+import log from "@scripts/commons/logger.js";
 
 /** get a repo default branch
  * @see https://docs.github.com/en/rest/reference/repos

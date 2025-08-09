@@ -1,10 +1,10 @@
-import { isNull, convertSingleCharToDoubleChar } from "@/commons/util.js";
-import { getProblemData, updateProblemData } from "@/swexpertacademy/storage.js";
-import { languages } from "@/swexpertacademy/variables.js";
-import { getNickname } from "@/swexpertacademy/util.js";
-import { getDirNameByTemplate } from "@/commons/storage.js";
-import urls from "@/constants/url.js";
-import log from "@/commons/logger.js";
+import { isNull, convertSingleCharToDoubleChar } from "@scripts/commons/util.js";
+import { getProblemData, updateProblemData } from "@scripts/swexpertacademy/storage.js";
+import { languages } from "@scripts/swexpertacademy/variables.js";
+import { getNickname } from "@scripts/swexpertacademy/util.js";
+import { getDirNameByTemplate } from "@/storage/storageAdapter.js";
+import urls from "@scripts/constants/url.js";
+import log from "@scripts/commons/logger.js";
 
 export function updateTextSourceEvent() {
   document.documentElement.setAttribute("onreset", "cEditor.save();");
@@ -129,7 +129,7 @@ export async function parseData() {
   }
   const { code } = data;
   log.debug("파싱 완료");
-  // eslint-disable-next-line consistent-return
+
   return makeData({
     link,
     problemId,

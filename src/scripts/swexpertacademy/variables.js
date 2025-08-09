@@ -1,4 +1,4 @@
-import constants from "@/constants/code.js";
+import constants from "@scripts/constants/code.js";
 
 export const languages = constants.languages.swexpertacademy;
 

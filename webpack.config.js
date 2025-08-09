@@ -67,8 +67,9 @@ module.exports = {
     alias: {
       sha1: "js-sha1",
       filesaver: "file-saver",
-      "@": path.resolve(__dirname, "src/scripts"),
+      "@": path.resolve(__dirname, "src"),
       "@components": path.resolve(__dirname, "src/components"),
+      "@scripts": path.resolve(__dirname, "src/scripts"),
     },
   },
 };

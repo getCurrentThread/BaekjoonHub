@@ -1,5 +1,5 @@
-import PlatformHubBase from "@/commons/platformhub-base.js";
-import { PLATFORMS } from "@/constants/config.js";
+import PlatformHubBase from "@scripts/commons/platformhub-base.js";
+import { PLATFORMS } from "@scripts/constants/config.js";
 
 /**
  * Problem info mapper for Baekjoon platform
